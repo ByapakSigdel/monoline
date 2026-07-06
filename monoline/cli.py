@@ -16,7 +16,8 @@ def main(argv: list | None = None) -> int:
     parser.add_argument("--version", action="version",
                         version=f"monoline {__version__}")
     args = parser.parse_args(argv)
-    print("monoline: app not wired yet")  # replaced in Task 4
+    from monoline.app import run
+    run(args.file)
     return 0
 
 
