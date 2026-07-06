@@ -10,6 +10,7 @@ from textual.widgets import Static
 
 from monoline.canvas import DrawCanvas
 from monoline.document import Document, Point, Stroke
+from monoline.smoothing import smooth
 
 
 class StatusBar(Static):
@@ -31,6 +32,7 @@ class MonolineApp(App):
         self.document = Document(0, 0)  # sized on mount
         self.pen_color = "#c0caf5"
         self.tool = "pen"
+        self.smoothing = 0.5
 
     def compose(self) -> ComposeResult:
         yield DrawCanvas(self.document)
@@ -44,10 +46,12 @@ class MonolineApp(App):
     # -- stroke pipeline (enriched by Tasks 5/6/8/9) --
 
     def finalize_stroke(self, points: List[Point], ctrl: bool) -> List[Stroke]:
-        return [Stroke(points=list(points), color=self.pen_color)]
+        pts = smooth(points, self.smoothing)
+        return [Stroke(points=pts, color=self.pen_color)]
 
     def preview_strokes(self, points: List[Point], ctrl: bool) -> List[Stroke]:
-        return [Stroke(points=list(points), color=self.pen_color)]
+        pts = smooth(points, self.smoothing)
+        return [Stroke(points=pts, color=self.pen_color)]
 
     # -- actions --
 
