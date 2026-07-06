@@ -102,6 +102,15 @@ def test_load_rejects_huge_point_coordinate(tmp_path):
         load(p)
 
 
+def test_load_rejects_overflowing_document_width(tmp_path):
+    p = tmp_path / "bad.json"
+    p.write_text(
+        '{"format": "monoline", "version": 1, "width": 1e999, "height": 8, '
+        '"background": "#101010", "palette": "tokyonight", "strokes": []}')
+    with pytest.raises(MonolineError):
+        load(p)
+
+
 def test_load_rejects_nonpositive_document_width(tmp_path):
     p = tmp_path / "bad.json"
     p.write_text(json.dumps({

@@ -72,8 +72,8 @@ def load(path: Union[str, Path]) -> Tuple[Document, str]:
             f"{path} uses format version {data.get('version')}; "
             f"this monoline supports version {VERSION}")
     try:
-        width = int(data["width"])
-        height = int(data["height"])
+        width = int(_finite(data["width"], 100_000))
+        height = int(_finite(data["height"], 100_000))
         if not (0 < width <= 100_000):
             raise ValueError(f"invalid document width {width!r}")
         if not (0 < height <= 100_000):
@@ -89,7 +89,7 @@ def load(path: Union[str, Path]) -> Tuple[Document, str]:
                 color=_color(s["color"]), kind=str(s["kind"]), width=width_))
         doc.strokes = strokes
         palette = str(data.get("palette", "tokyonight"))
-    except (KeyError, TypeError, ValueError) as exc:
+    except (KeyError, TypeError, ValueError, OverflowError) as exc:
         raise MonolineError(f"{path} is corrupt: {exc}") from exc
     doc.dirty = False
     return doc, palette
