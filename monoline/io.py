@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Tuple, Union
 
@@ -10,6 +11,15 @@ from monoline.raster import render_cells
 
 FORMAT = "monoline"
 VERSION = 1
+
+_HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def _color(value) -> str:
+    s = str(value)
+    if not _HEX_COLOR.match(s):
+        raise ValueError(f"invalid color {s!r}")
+    return s
 
 
 class MonolineError(Exception):
@@ -46,10 +56,10 @@ def load(path: Union[str, Path]) -> Tuple[Document, str]:
             f"this monoline supports version {VERSION}")
     try:
         doc = Document(int(data["width"]), int(data["height"]),
-                       background=str(data["background"]))
+                       background=_color(data["background"]))
         doc.strokes = [
             Stroke(points=[(float(x), float(y)) for x, y in s["points"]],
-                   color=str(s["color"]), kind=str(s["kind"]),
+                   color=_color(s["color"]), kind=str(s["kind"]),
                    width=float(s["width"]))
             for s in data["strokes"]
         ]

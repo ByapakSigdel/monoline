@@ -58,6 +58,18 @@ def test_load_rejects_invalid_json(tmp_path):
         load(p)
 
 
+def test_load_rejects_invalid_color(tmp_path):
+    p = tmp_path / "bad.json"
+    p.write_text(json.dumps({
+        "format": "monoline", "version": 1, "width": 8, "height": 8,
+        "background": "#101010", "palette": "tokyonight",
+        "strokes": [{"kind": "pen", "color": '" /><script>alert(1)</script>',
+                     "width": 1.0, "points": [[0.0, 0.0]]}],
+    }))
+    with pytest.raises(MonolineError):
+        load(p)
+
+
 def test_export_ansi_contains_braille_and_color():
     doc = Document(16, 8)
     doc.add_strokes([Stroke(points=[(0.0, 0.0), (7.0, 0.0)], color="#ff0000")])
