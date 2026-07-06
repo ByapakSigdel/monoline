@@ -1,9 +1,10 @@
 import json
+import xml.etree.ElementTree as ET
 
 import pytest
 
 from monoline.document import Document, Stroke
-from monoline.io import MonolineError, load, save
+from monoline.io import MonolineError, export_ansi, export_svg, load, save
 
 
 def make_doc():
@@ -55,3 +56,40 @@ def test_load_rejects_invalid_json(tmp_path):
     p.write_text("{nope")
     with pytest.raises(MonolineError):
         load(p)
+
+
+def test_export_ansi_contains_braille_and_color():
+    doc = Document(16, 8)
+    doc.add_strokes([Stroke(points=[(0.0, 0.0), (7.0, 0.0)], color="#ff0000")])
+    out = export_ansi(doc)
+    assert "\x1b[38;2;255;0;0m" in out
+    assert "\x1b[0m" in out
+    assert any(0x2800 <= ord(ch) <= 0x28FF for ch in out)
+    assert len(out.splitlines()) == 2  # 8 dots tall = 2 cell rows
+
+
+def test_export_ansi_trims_trailing_blanks():
+    doc = Document(16, 8)
+    doc.add_strokes([Stroke(points=[(0.0, 0.0)], color="#ffffff")])
+    line = export_ansi(doc).splitlines()[0]
+    assert not line.endswith(" ")
+
+
+def test_export_svg_structure():
+    doc = Document(320, 192, background="#101010")
+    doc.add_strokes([
+        Stroke(points=[(10.0, 10.0), (50.0, 50.0)], color="#7aa2f7"),
+        Stroke(points=[(20.0, 20.0), (30.0, 30.0)], kind="erase", width=6.0),
+    ])
+    svg = export_svg(doc)
+    root = ET.fromstring(svg)
+    assert root.get("viewBox") == "0 0 320 192"
+    ns = "{http://www.w3.org/2000/svg}"
+    rect = root.find(f"{ns}rect")
+    assert rect.get("fill") == "#101010"
+    lines = root.findall(f"{ns}polyline")
+    assert len(lines) == 2
+    assert lines[0].get("stroke") == "#7aa2f7"
+    assert lines[0].get("stroke-width") == "1.5"
+    assert lines[1].get("stroke") == "#101010"  # erase = background color
+    assert lines[1].get("stroke-width") == "6.0"

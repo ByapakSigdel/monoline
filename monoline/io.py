@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Tuple, Union
 
 from monoline.document import Document, Stroke
+from monoline.raster import render_cells
 
 FORMAT = "monoline"
 VERSION = 1
@@ -57,3 +58,53 @@ def load(path: Union[str, Path]) -> Tuple[Document, str]:
         raise MonolineError(f"{path} is corrupt: {exc}") from exc
     doc.dirty = False
     return doc, palette
+
+
+def _hex_to_rgb(color: str):
+    return int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+
+
+def export_ansi(document: Document) -> str:
+    cells = render_cells(document.strokes, document.width, document.height)
+    cols, rows = document.width // 2, document.height // 4
+    lines = []
+    for y in range(rows):
+        parts = []
+        current = None
+        used_color = False
+        for x in range(cols):
+            cell = cells.get((x, y))
+            if cell is None:
+                parts.append(" ")
+                continue
+            char, color = cell
+            if color != current:
+                r, g, b = _hex_to_rgb(color)
+                parts.append(f"\x1b[38;2;{r};{g};{b}m")
+                current = color
+                used_color = True
+            parts.append(char)
+        line = "".join(parts).rstrip()
+        if used_color:
+            line += "\x1b[0m"
+        lines.append(line)
+    return "\n".join(lines) + "\n"
+
+
+def export_svg(document: Document) -> str:
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" '
+        f'viewBox="0 0 {document.width} {document.height}">',
+        f'<rect width="{document.width}" height="{document.height}" '
+        f'fill="{document.background}"/>',
+    ]
+    for s in document.strokes:
+        color = document.background if s.kind == "erase" else s.color
+        width = s.width if s.kind == "erase" else 1.5
+        pts = " ".join(f"{x:.2f},{y:.2f}" for x, y in s.points)
+        parts.append(
+            f'<polyline points="{pts}" fill="none" stroke="{color}" '
+            f'stroke-width="{width}" stroke-linecap="round" '
+            f'stroke-linejoin="round"/>')
+    parts.append("</svg>")
+    return "\n".join(parts) + "\n"

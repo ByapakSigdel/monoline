@@ -12,7 +12,7 @@ from monoline.canvas import DrawCanvas
 from monoline.config import load_config
 from monoline.dialogs import TextPrompt
 from monoline.document import Document, Point, Stroke
-from monoline.io import MonolineError, load, save
+from monoline.io import MonolineError, export_ansi, export_svg, load, save
 from monoline.palettes import PALETTES, get_palette
 from monoline.shapes import recognize
 from monoline.smoothing import smooth
@@ -37,6 +37,7 @@ class MonolineApp(App):
         Binding("s", "cycle_symmetry", "Symmetry", show=False),
         Binding("g", "toggle_grid", "Grid", show=False),
         Binding("ctrl+s", "save", "Save", show=False, priority=True),
+        Binding("x", "export", "Export", show=False),
     ] + [Binding(str(i + 1), f"pick_color({i})", "Color", show=False) for i in range(9)]
 
     def __init__(self, path: Optional[str] = None) -> None:
@@ -153,6 +154,26 @@ class MonolineApp(App):
         self.document.dirty = False
         self.update_status()
         self.notify(f"saved {os.path.basename(path)}")
+
+    def action_export(self) -> None:
+        self.push_screen(
+            TextPrompt("Export to (.txt = ANSI, .svg = SVG):", "drawing.txt"),
+            self._on_export_name)
+
+    def _on_export_name(self, name) -> None:
+        if not name:
+            return
+        try:
+            if name.lower().endswith(".svg"):
+                content = export_svg(self.document)
+            else:
+                content = export_ansi(self.document)
+            with open(name, "w", encoding="utf-8") as f:
+                f.write(content)
+        except OSError as exc:
+            self.notify(f"export failed: {exc}", severity="error")
+            return
+        self.notify(f"exported {os.path.basename(name)}")
 
     def _apply_palette(self) -> None:
         canvas = self.query_one(DrawCanvas)
