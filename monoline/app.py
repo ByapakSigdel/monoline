@@ -33,6 +33,7 @@ class MonolineApp(App):
         Binding("d", "tool_pen", "Pen", show=False),
         Binding("e", "tool_erase", "Eraser", show=False),
         Binding("s", "cycle_symmetry", "Symmetry", show=False),
+        Binding("g", "toggle_grid", "Grid", show=False),
     ] + [Binding(str(i + 1), f"pick_color({i})", "Color", show=False) for i in range(9)]
 
     def __init__(self, path: Optional[str] = None) -> None:
@@ -104,6 +105,14 @@ class MonolineApp(App):
         self.symmetry = MODES[(MODES.index(self.symmetry) + 1) % len(MODES)]
         self.update_status()
 
+    def action_toggle_grid(self) -> None:
+        self.grid_on = not self.grid_on
+        canvas = self.query_one(DrawCanvas)
+        canvas.grid_on = self.grid_on
+        canvas.grid_color = self.palette.grid
+        canvas.refresh()
+        self.update_status()
+
     def action_undo(self) -> None:
         if self.document.undo():
             self.query_one(DrawCanvas).rebuild()
@@ -120,6 +129,7 @@ class MonolineApp(App):
     def _apply_palette(self) -> None:
         canvas = self.query_one(DrawCanvas)
         canvas.styles.background = self.palette.background
+        canvas.grid_color = self.palette.grid
         if not self.document.strokes:
             self.document.background = self.palette.background
         canvas.rebuild()
@@ -146,9 +156,10 @@ class MonolineApp(App):
         )
         dirty = "●" if self.document.dirty else " "
         name = os.path.basename(self.path) if self.path else "untitled"
+        grid = "  grid" if self.grid_on else ""
         self.query_one(StatusBar).update(
             f" {self.tool}  {self.palette.name} {swatches}  sym:{self.symmetry}"
-            f"  {name} {dirty}  ? help"
+            f"{grid}  {name} {dirty}  ? help"
         )
 
 

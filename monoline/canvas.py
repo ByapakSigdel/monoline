@@ -28,6 +28,8 @@ class DrawCanvas(Widget):
         self._live: List[Stroke] = []        # preview strokes during drag
         self._cells: Dict = {}
         self.can_focus = True
+        self.grid_on = False
+        self.grid_color = "#292e42"
 
     # -- gesture API (mouse handlers delegate; tests call directly) --
 
@@ -80,7 +82,10 @@ class DrawCanvas(Widget):
         for x in range(self.size.width):
             cell = self._cells.get((x, y))
             if cell is None:
-                segments.append(Segment(" "))
+                if self.grid_on and x % 4 == 0 and y % 2 == 0:
+                    segments.append(Segment("⠂", Style(color=self.grid_color)))
+                else:
+                    segments.append(Segment(" "))
             else:
                 char, color = cell
                 segments.append(Segment(char, Style(color=color)))

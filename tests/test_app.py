@@ -115,6 +115,20 @@ async def test_symmetry_gesture_is_one_undo_unit():
         assert app.document.strokes == []
 
 
+async def test_grid_toggle_renders_grid_dots():
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        canvas = app.query_one(DrawCanvas)
+        strip = canvas.render_line(0)
+        assert "⠂" not in strip.text
+        await pilot.press("g")
+        assert app.grid_on is True
+        strip = canvas.render_line(0)
+        assert "⠂" in strip.text
+        await pilot.press("g")
+        assert app.grid_on is False
+
+
 async def test_erase_removes_rendered_dots():
     from monoline.raster import render_cells
     app = MonolineApp()
