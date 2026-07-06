@@ -86,6 +86,18 @@ async def test_palette_switch_keeps_existing_stroke_colors():
         assert app.document.strokes[0].color == before
 
 
+async def test_palette_switch_updates_background_wysiwyg():
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        canvas = app.query_one(DrawCanvas)
+        canvas.begin(2, 2, ctrl=False)
+        canvas.extend(8, 4, ctrl=False)
+        canvas.end()
+        await pilot.press("p")
+        assert app.document.background == app.palette.background
+        assert canvas.styles.background.hex.lower() == app.palette.background.lower()
+
+
 async def test_eraser_tool_creates_erase_stroke():
     app = MonolineApp()
     async with app.run_test(size=(40, 12)) as pilot:

@@ -38,7 +38,7 @@ def load_config(path: Path | None = None) -> Config:
         return Config()
     try:
         data = tomllib.loads(p.read_text(encoding="utf-8"))
-    except (tomllib.TOMLDecodeError, OSError):
+    except (tomllib.TOMLDecodeError, OSError, ValueError):
         return Config()
     cfg = Config()
     sc = data.get("shape_correct")

@@ -28,6 +28,15 @@ def test_round_trip(tmp_path):
     assert doc2.undo() is False  # history not persisted
 
 
+def test_save_is_atomic_leaves_no_tmp_file(tmp_path):
+    p = tmp_path / "a.mono.json"
+    save(make_doc(), "tokyonight", p)
+    assert not p.with_name(p.name + ".tmp").exists()
+    doc2, palette = load(p)
+    assert palette == "tokyonight"
+    assert doc2.strokes == make_doc().strokes
+
+
 def test_format_fields(tmp_path):
     p = tmp_path / "a.mono.json"
     save(make_doc(), "nord", p)
@@ -54,6 +63,52 @@ def test_load_rejects_future_version(tmp_path):
 def test_load_rejects_invalid_json(tmp_path):
     p = tmp_path / "bad.json"
     p.write_text("{nope")
+    with pytest.raises(MonolineError):
+        load(p)
+
+
+def test_load_rejects_nan_point(tmp_path):
+    p = tmp_path / "bad.json"
+    p.write_text(json.dumps({
+        "format": "monoline", "version": 1, "width": 8, "height": 8,
+        "background": "#101010", "palette": "tokyonight",
+        "strokes": [{"kind": "pen", "color": "#ffffff",
+                     "width": 1.0, "points": [[0.0, float("nan")]]}],
+    }))
+    with pytest.raises(MonolineError):
+        load(p)
+
+
+def test_load_rejects_infinite_stroke_width(tmp_path):
+    p = tmp_path / "bad.json"
+    p.write_text(
+        '{"format": "monoline", "version": 1, "width": 8, "height": 8, '
+        '"background": "#101010", "palette": "tokyonight", '
+        '"strokes": [{"kind": "pen", "color": "#ffffff", '
+        '"width": Infinity, "points": [[0.0, 0.0]]}]}')
+    with pytest.raises(MonolineError):
+        load(p)
+
+
+def test_load_rejects_huge_point_coordinate(tmp_path):
+    p = tmp_path / "bad.json"
+    p.write_text(json.dumps({
+        "format": "monoline", "version": 1, "width": 8, "height": 8,
+        "background": "#101010", "palette": "tokyonight",
+        "strokes": [{"kind": "pen", "color": "#ffffff",
+                     "width": 1.0, "points": [[0.0, 1e308]]}],
+    }))
+    with pytest.raises(MonolineError):
+        load(p)
+
+
+def test_load_rejects_nonpositive_document_width(tmp_path):
+    p = tmp_path / "bad.json"
+    p.write_text(json.dumps({
+        "format": "monoline", "version": 1, "width": 0, "height": 8,
+        "background": "#101010", "palette": "tokyonight",
+        "strokes": [],
+    }))
     with pytest.raises(MonolineError):
         load(p)
 

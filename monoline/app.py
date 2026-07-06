@@ -200,12 +200,12 @@ class MonolineApp(App):
             return
         self.notify(f"exported {os.path.basename(name)}")
 
-    def _apply_palette(self) -> None:
+    def _apply_palette(self, switch: bool = False) -> None:
         canvas = self.query_one(DrawCanvas)
-        canvas.styles.background = self.palette.background
-        canvas.grid_color = self.palette.grid
-        if not self.document.strokes:
+        if switch or not self.document.strokes:
             self.document.background = self.palette.background
+        canvas.styles.background = self.document.background
+        canvas.grid_color = self.palette.grid
         canvas.rebuild()
         self.update_status()
 
@@ -216,12 +216,12 @@ class MonolineApp(App):
     def action_next_palette(self) -> None:
         i = PALETTES.index(self.palette)
         self.palette = PALETTES[(i + 1) % len(PALETTES)]
-        self._apply_palette()
+        self._apply_palette(switch=True)
 
     def action_prev_palette(self) -> None:
         i = PALETTES.index(self.palette)
         self.palette = PALETTES[(i - 1) % len(PALETTES)]
-        self._apply_palette()
+        self._apply_palette(switch=True)
 
     def update_status(self) -> None:
         swatches = "".join(

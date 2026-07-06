@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import math
+import os
 import re
 from pathlib import Path
 from typing import Tuple, Union
@@ -17,9 +19,20 @@ _HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 def _color(value) -> str:
     s = str(value)
-    if not _HEX_COLOR.match(s):
+    if not _HEX_COLOR.fullmatch(s):
         raise ValueError(f"invalid color {s!r}")
     return s
+
+
+def _reject_constant(value):
+    raise ValueError(f"non-finite number {value!r} not allowed")
+
+
+def _finite(value, limit: float) -> float:
+    f = float(value)
+    if not (math.isfinite(f) and abs(f) <= limit):
+        raise ValueError(f"non-finite or out-of-range number {value!r}")
+    return f
 
 
 class MonolineError(Exception):
@@ -40,13 +53,17 @@ def save(document: Document, palette_name: str, path: Union[str, Path]) -> None:
             for s in document.strokes
         ],
     }
-    Path(path).write_text(json.dumps(data), encoding="utf-8")
+    path = Path(path)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(data), encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def load(path: Union[str, Path]) -> Tuple[Document, str]:
     try:
-        data = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        data = json.loads(Path(path).read_text(encoding="utf-8"),
+                          parse_constant=_reject_constant)
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
         raise MonolineError(f"cannot read {path}: {exc}") from exc
     if not isinstance(data, dict) or data.get("format") != FORMAT:
         raise MonolineError(f"{path} is not a monoline file")
@@ -55,14 +72,22 @@ def load(path: Union[str, Path]) -> Tuple[Document, str]:
             f"{path} uses format version {data.get('version')}; "
             f"this monoline supports version {VERSION}")
     try:
-        doc = Document(int(data["width"]), int(data["height"]),
-                       background=_color(data["background"]))
-        doc.strokes = [
-            Stroke(points=[(float(x), float(y)) for x, y in s["points"]],
-                   color=_color(s["color"]), kind=str(s["kind"]),
-                   width=float(s["width"]))
-            for s in data["strokes"]
-        ]
+        width = int(data["width"])
+        height = int(data["height"])
+        if not (0 < width <= 100_000):
+            raise ValueError(f"invalid document width {width!r}")
+        if not (0 < height <= 100_000):
+            raise ValueError(f"invalid document height {height!r}")
+        doc = Document(width, height, background=_color(data["background"]))
+        strokes = []
+        for s in data["strokes"]:
+            width_ = _finite(s["width"], 1e4)
+            if width_ <= 0:
+                raise ValueError(f"invalid stroke width {width_!r}")
+            strokes.append(Stroke(
+                points=[(_finite(x, 1e6), _finite(y, 1e6)) for x, y in s["points"]],
+                color=_color(s["color"]), kind=str(s["kind"]), width=width_))
+        doc.strokes = strokes
         palette = str(data.get("palette", "tokyonight"))
     except (KeyError, TypeError, ValueError) as exc:
         raise MonolineError(f"{path} is corrupt: {exc}") from exc

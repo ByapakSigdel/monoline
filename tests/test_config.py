@@ -29,3 +29,9 @@ def test_unparseable_file_falls_back(tmp_path: Path):
     p = tmp_path / "config.toml"
     p.write_text("not [valid toml ===")
     assert load_config(p) == Config()
+
+
+def test_non_utf8_config_falls_back(tmp_path: Path):
+    p = tmp_path / "config.toml"
+    p.write_bytes('palette = "nord"'.encode("utf-16"))
+    assert load_config(p) == Config()
