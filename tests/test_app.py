@@ -129,6 +129,21 @@ async def test_grid_toggle_renders_grid_dots():
         assert app.grid_on is False
 
 
+async def test_save_and_reopen(tmp_path):
+    path = str(tmp_path / "pic.mono.json")
+    app = MonolineApp(path)
+    async with app.run_test(size=(40, 12)) as pilot:
+        canvas = app.query_one(DrawCanvas)
+        canvas.begin(2, 2, ctrl=False)
+        canvas.extend(8, 4, ctrl=False)
+        canvas.end()
+        await pilot.press("ctrl+s")
+        assert app.document.dirty is False
+    app2 = MonolineApp(path)
+    async with app2.run_test(size=(40, 12)):
+        assert len(app2.document.strokes) == 1
+
+
 async def test_erase_removes_rendered_dots():
     from monoline.raster import render_cells
     app = MonolineApp()

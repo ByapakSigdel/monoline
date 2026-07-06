@@ -10,7 +10,9 @@ from textual.widgets import Static
 
 from monoline.canvas import DrawCanvas
 from monoline.config import load_config
+from monoline.dialogs import TextPrompt
 from monoline.document import Document, Point, Stroke
+from monoline.io import MonolineError, load, save
 from monoline.palettes import PALETTES, get_palette
 from monoline.shapes import recognize
 from monoline.smoothing import smooth
@@ -34,13 +36,17 @@ class MonolineApp(App):
         Binding("e", "tool_erase", "Eraser", show=False),
         Binding("s", "cycle_symmetry", "Symmetry", show=False),
         Binding("g", "toggle_grid", "Grid", show=False),
+        Binding("ctrl+s", "save", "Save", show=False, priority=True),
     ] + [Binding(str(i + 1), f"pick_color({i})", "Color", show=False) for i in range(9)]
 
     def __init__(self, path: Optional[str] = None) -> None:
         super().__init__()
         self.path = path
-        self.document = Document(0, 0)  # sized on mount
+        self.document = Document(0, 0)  # sized on mount, unless loaded below
         self.config = load_config()
+        if path is not None and os.path.exists(path):
+            self.document, palette_name = load(path)
+            self.config.palette = palette_name
         self.palette = get_palette(self.config.palette)
         self.color_index = 0
         self.tool = "pen"
@@ -125,6 +131,28 @@ class MonolineApp(App):
 
     def action_request_quit(self) -> None:
         self.exit()  # Task 13 adds the unsaved-changes confirmation
+
+    def action_save(self) -> None:
+        if self.path:
+            self._do_save(self.path)
+        else:
+            self.push_screen(TextPrompt("Save as:", "drawing.mono.json"),
+                             self._on_save_name)
+
+    def _on_save_name(self, name) -> None:
+        if name:
+            self._do_save(name)
+
+    def _do_save(self, path: str) -> None:
+        try:
+            save(self.document, self.palette.name, path)
+        except OSError as exc:
+            self.notify(f"save failed: {exc}", severity="error")
+            return
+        self.path = path
+        self.document.dirty = False
+        self.update_status()
+        self.notify(f"saved {os.path.basename(path)}")
 
     def _apply_palette(self) -> None:
         canvas = self.query_one(DrawCanvas)

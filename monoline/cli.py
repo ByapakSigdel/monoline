@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 
 from monoline import __version__
 
@@ -17,7 +18,12 @@ def main(argv: list | None = None) -> int:
                         version=f"monoline {__version__}")
     args = parser.parse_args(argv)
     from monoline.app import run
-    run(args.file)
+    from monoline.io import MonolineError
+    try:
+        run(args.file)
+    except MonolineError as exc:
+        print(f"monoline: {exc}", file=sys.stderr)
+        return 1
     return 0
 
 
