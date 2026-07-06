@@ -61,3 +61,26 @@ async def test_ctrl_drag_snaps_near_circle():
         canvas.end()
         pts = app.document.strokes[0].points
         assert len(pts) == 65  # snapped to sampled ellipse/circle
+
+
+async def test_color_and_palette_keys():
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        start = app.palette.name
+        await pilot.press("3")
+        assert app.color_index == 2
+        assert app.pen_color == app.palette.colors[2]
+        await pilot.press("p")
+        assert app.palette.name != start
+
+
+async def test_palette_switch_keeps_existing_stroke_colors():
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        canvas = app.query_one(DrawCanvas)
+        canvas.begin(2, 2, ctrl=False)
+        canvas.extend(8, 4, ctrl=False)
+        canvas.end()
+        before = app.document.strokes[0].color
+        await pilot.press("p")
+        assert app.document.strokes[0].color == before

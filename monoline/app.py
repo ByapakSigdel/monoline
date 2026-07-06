@@ -11,6 +11,7 @@ from textual.widgets import Static
 from monoline.canvas import DrawCanvas
 from monoline.config import load_config
 from monoline.document import Document, Point, Stroke
+from monoline.palettes import PALETTES, get_palette
 from monoline.shapes import recognize
 from monoline.smoothing import smooth
 
@@ -26,17 +27,24 @@ class MonolineApp(App):
         Binding("r", "redo", "Redo", show=False),
         Binding("ctrl+y", "redo", "Redo", show=False, priority=True),
         Binding("q", "request_quit", "Quit", show=False),
-    ]
+        Binding("p", "next_palette", "Palette", show=False),
+        Binding("P", "prev_palette", "Palette back", show=False),
+    ] + [Binding(str(i + 1), f"pick_color({i})", "Color", show=False) for i in range(9)]
 
     def __init__(self, path: Optional[str] = None) -> None:
         super().__init__()
         self.path = path
         self.document = Document(0, 0)  # sized on mount
-        self.pen_color = "#c0caf5"
-        self.tool = "pen"
         self.config = load_config()
+        self.palette = get_palette(self.config.palette)
+        self.color_index = 0
+        self.tool = "pen"
         self.smoothing = self.config.smoothing
         self.grid_on = False  # Task 10 toggles this
+
+    @property
+    def pen_color(self) -> str:
+        return self.palette.colors[self.color_index]
 
     def compose(self) -> ComposeResult:
         yield DrawCanvas(self.document)
@@ -45,7 +53,7 @@ class MonolineApp(App):
     def on_mount(self) -> None:
         # Document sizing happens in DrawCanvas.on_resize, once the canvas
         # actually has its size (canvas.size is still 0x0 when Mount fires).
-        self.update_status()
+        self._apply_palette()
 
     # -- stroke pipeline (enriched by Tasks 5/6/8/9) --
 
@@ -77,11 +85,37 @@ class MonolineApp(App):
     def action_request_quit(self) -> None:
         self.exit()  # Task 13 adds the unsaved-changes confirmation
 
+    def _apply_palette(self) -> None:
+        canvas = self.query_one(DrawCanvas)
+        canvas.styles.background = self.palette.background
+        if not self.document.strokes:
+            self.document.background = self.palette.background
+        canvas.rebuild()
+        self.update_status()
+
+    def action_pick_color(self, index: int) -> None:
+        self.color_index = index
+        self.update_status()
+
+    def action_next_palette(self) -> None:
+        i = PALETTES.index(self.palette)
+        self.palette = PALETTES[(i + 1) % len(PALETTES)]
+        self._apply_palette()
+
+    def action_prev_palette(self) -> None:
+        i = PALETTES.index(self.palette)
+        self.palette = PALETTES[(i - 1) % len(PALETTES)]
+        self._apply_palette()
+
     def update_status(self) -> None:
+        swatches = "".join(
+            f"[{'underline ' if i == self.color_index else ''}{c}]●[/]"
+            for i, c in enumerate(self.palette.colors)
+        )
         dirty = "●" if self.document.dirty else " "
         name = os.path.basename(self.path) if self.path else "untitled"
         self.query_one(StatusBar).update(
-            f" {self.tool}  {name} {dirty}  ? help"
+            f" {self.tool}  {self.palette.name} {swatches}  {name} {dirty}  ? help"
         )
 
 
