@@ -10,8 +10,9 @@ from textual.widgets import Static
 
 from monoline.canvas import DrawCanvas
 from monoline.config import load_config
-from monoline.dialogs import TextPrompt
+from monoline.dialogs import Confirm, TextPrompt
 from monoline.document import Document, Point, Stroke
+from monoline.help import HelpScreen
 from monoline.io import MonolineError, export_ansi, export_svg, load, save
 from monoline.palettes import PALETTES, get_palette
 from monoline.shapes import recognize
@@ -38,6 +39,8 @@ class MonolineApp(App):
         Binding("g", "toggle_grid", "Grid", show=False),
         Binding("ctrl+s", "save", "Save", show=False, priority=True),
         Binding("x", "export", "Export", show=False),
+        Binding("question_mark", "help", "Help", show=False),
+        Binding("c", "clear", "Clear", show=False),
     ] + [Binding(str(i + 1), f"pick_color({i})", "Color", show=False) for i in range(9)]
 
     def __init__(self, path: Optional[str] = None) -> None:
@@ -130,8 +133,30 @@ class MonolineApp(App):
             self.query_one(DrawCanvas).rebuild()
             self.update_status()
 
+    def action_help(self) -> None:
+        self.push_screen(HelpScreen())
+
+    def action_clear(self) -> None:
+        if not self.document.strokes:
+            return
+        self.push_screen(Confirm("Clear the canvas?"), self._on_clear)
+
+    def _on_clear(self, yes) -> None:
+        if yes:
+            self.document.clear()
+            self.query_one(DrawCanvas).rebuild()
+            self.update_status()
+
     def action_request_quit(self) -> None:
-        self.exit()  # Task 13 adds the unsaved-changes confirmation
+        if not self.document.dirty:
+            self.exit()
+            return
+        self.push_screen(Confirm("Unsaved changes — quit anyway?"),
+                         self._on_quit)
+
+    def _on_quit(self, yes) -> None:
+        if yes:
+            self.exit()
 
     def action_save(self) -> None:
         if self.path:

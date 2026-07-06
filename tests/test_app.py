@@ -144,6 +144,42 @@ async def test_save_and_reopen(tmp_path):
         assert len(app2.document.strokes) == 1
 
 
+async def test_help_overlay_opens_and_closes():
+    from monoline.help import HelpScreen
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        await pilot.press("question_mark")
+        assert isinstance(app.screen, HelpScreen)
+        await pilot.press("escape")
+        assert not isinstance(app.screen, HelpScreen)
+
+
+async def test_clear_asks_confirmation():
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        canvas = app.query_one(DrawCanvas)
+        canvas.begin(2, 2, ctrl=False)
+        canvas.extend(8, 4, ctrl=False)
+        canvas.end()
+        await pilot.press("c")
+        await pilot.press("y")
+        assert app.document.strokes == []
+        # undo restores even after clear
+        await pilot.press("u")
+        assert len(app.document.strokes) == 1
+
+
+async def test_quit_with_unsaved_changes_confirms():
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        canvas = app.query_one(DrawCanvas)
+        canvas.begin(2, 2, ctrl=False)
+        canvas.end()
+        await pilot.press("q")
+        await pilot.press("n")  # stay
+        assert app.is_running
+
+
 async def test_erase_removes_rendered_dots():
     from monoline.raster import render_cells
     app = MonolineApp()
