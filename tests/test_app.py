@@ -45,3 +45,19 @@ async def test_cell_to_dot_mapping():
         canvas.end()
         (x, y) = app.document.strokes[0].points[0]
         assert (x, y) == (6.5, 21.5)
+
+
+async def test_ctrl_drag_snaps_near_circle():
+    app = MonolineApp()
+    app.config.shape_correct = "ctrl"
+    async with app.run_test(size=(60, 20)):
+        canvas = app.query_one(DrawCanvas)
+        import math
+        cells = [(15 + round(8 * math.cos(a * math.pi / 12)),
+                  8 + round(4 * math.sin(a * math.pi / 12))) for a in range(25)]
+        canvas.begin(*cells[0], ctrl=True)
+        for c, r in cells[1:]:
+            canvas.extend(c, r, ctrl=True)
+        canvas.end()
+        pts = app.document.strokes[0].points
+        assert len(pts) == 65  # snapped to sampled ellipse/circle

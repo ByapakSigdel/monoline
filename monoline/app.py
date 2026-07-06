@@ -9,7 +9,9 @@ from textual.binding import Binding
 from textual.widgets import Static
 
 from monoline.canvas import DrawCanvas
+from monoline.config import load_config
 from monoline.document import Document, Point, Stroke
+from monoline.shapes import recognize
 from monoline.smoothing import smooth
 
 
@@ -32,7 +34,9 @@ class MonolineApp(App):
         self.document = Document(0, 0)  # sized on mount
         self.pen_color = "#c0caf5"
         self.tool = "pen"
-        self.smoothing = 0.5
+        self.config = load_config()
+        self.smoothing = self.config.smoothing
+        self.grid_on = False  # Task 10 toggles this
 
     def compose(self) -> ComposeResult:
         yield DrawCanvas(self.document)
@@ -47,6 +51,11 @@ class MonolineApp(App):
 
     def finalize_stroke(self, points: List[Point], ctrl: bool) -> List[Stroke]:
         pts = smooth(points, self.smoothing)
+        mode = self.config.shape_correct
+        if mode == "always" or (mode == "ctrl" and ctrl):
+            snapped = recognize(pts, grid_spacing=8.0 if self.grid_on else None)
+            if snapped is not None:
+                pts = snapped
         return [Stroke(points=pts, color=self.pen_color)]
 
     def preview_strokes(self, points: List[Point], ctrl: bool) -> List[Stroke]:
