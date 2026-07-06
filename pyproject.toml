@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "monoline"
+version = "0.1.0"
+description = "Aesthetic drawing in your terminal — smooth braille strokes, shape correction, palettes, symmetry."
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "ByapakSigdel", email = "sigdelmb123@gmail.com" }]
+requires-python = ">=3.9"
+dependencies = [
+  "textual>=1.0",
+  "platformdirs>=3",
+  "tomli>=2 ; python_version < '3.11'",
+]
+keywords = ["terminal", "drawing", "tui", "braille", "art"]
+classifiers = [
+  "Environment :: Console",
+  "Intended Audience :: End Users/Desktop",
+  "Programming Language :: Python :: 3",
+  "Topic :: Artistic Software",
+]
+
+[project.urls]
+Homepage = "https://github.com/ByapakSigdel/monoline"
+
+[project.scripts]
+monoline = "monoline.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "pytest-asyncio>=0.23"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
