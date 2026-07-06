@@ -84,3 +84,35 @@ async def test_palette_switch_keeps_existing_stroke_colors():
         before = app.document.strokes[0].color
         await pilot.press("p")
         assert app.document.strokes[0].color == before
+
+
+async def test_eraser_tool_creates_erase_stroke():
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        canvas = app.query_one(DrawCanvas)
+        await pilot.press("e")
+        assert app.tool == "erase"
+        canvas.begin(2, 2, ctrl=False)
+        canvas.extend(8, 4, ctrl=False)
+        canvas.end()
+        s = app.document.strokes[0]
+        assert s.kind == "erase" and s.width == 6.0
+        await pilot.press("d")
+        assert app.tool == "pen"
+
+
+async def test_erase_removes_rendered_dots():
+    from monoline.raster import render_cells
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        canvas = app.query_one(DrawCanvas)
+        canvas.begin(2, 2, ctrl=False)
+        canvas.extend(10, 2, ctrl=False)
+        canvas.end()
+        await pilot.press("e")
+        canvas.begin(2, 2, ctrl=False)
+        canvas.extend(10, 2, ctrl=False)
+        canvas.end()
+        cells = render_cells(app.document.strokes,
+                             app.document.width, app.document.height)
+        assert cells == {}

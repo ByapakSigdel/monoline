@@ -29,6 +29,8 @@ class MonolineApp(App):
         Binding("q", "request_quit", "Quit", show=False),
         Binding("p", "next_palette", "Palette", show=False),
         Binding("P", "prev_palette", "Palette back", show=False),
+        Binding("d", "tool_pen", "Pen", show=False),
+        Binding("e", "tool_erase", "Eraser", show=False),
     ] + [Binding(str(i + 1), f"pick_color({i})", "Color", show=False) for i in range(9)]
 
     def __init__(self, path: Optional[str] = None) -> None:
@@ -57,20 +59,35 @@ class MonolineApp(App):
 
     # -- stroke pipeline (enriched by Tasks 5/6/8/9) --
 
-    def finalize_stroke(self, points: List[Point], ctrl: bool) -> List[Stroke]:
+    ERASER_WIDTH = 6.0
+
+    def _gesture_strokes(self, points: List[Point], ctrl: bool,
+                         final: bool) -> List[Stroke]:
         pts = smooth(points, self.smoothing)
+        if self.tool == "erase":
+            return [Stroke(points=pts, kind="erase", width=self.ERASER_WIDTH)]
         mode = self.config.shape_correct
-        if mode == "always" or (mode == "ctrl" and ctrl):
+        if final and (mode == "always" or (mode == "ctrl" and ctrl)):
             snapped = recognize(pts, grid_spacing=8.0 if self.grid_on else None)
             if snapped is not None:
                 pts = snapped
         return [Stroke(points=pts, color=self.pen_color)]
 
+    def finalize_stroke(self, points: List[Point], ctrl: bool) -> List[Stroke]:
+        return self._gesture_strokes(points, ctrl, final=True)
+
     def preview_strokes(self, points: List[Point], ctrl: bool) -> List[Stroke]:
-        pts = smooth(points, self.smoothing)
-        return [Stroke(points=pts, color=self.pen_color)]
+        return self._gesture_strokes(points, ctrl, final=False)
 
     # -- actions --
+
+    def action_tool_pen(self) -> None:
+        self.tool = "pen"
+        self.update_status()
+
+    def action_tool_erase(self) -> None:
+        self.tool = "erase"
+        self.update_status()
 
     def action_undo(self) -> None:
         if self.document.undo():
