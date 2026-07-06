@@ -67,6 +67,12 @@ class DrawCanvas(Widget):
         self.refresh()
 
     def on_resize(self, event: events.Resize) -> None:
+        # Size the document once, when the canvas first learns its real size.
+        # Document size is fixed at creation; later terminal resizes do NOT
+        # resize the document, and loaded documents (width != 0) keep theirs.
+        if self.document.width == 0:
+            self.document.width = max(self.size.width, 1) * 2
+            self.document.height = max(self.size.height, 1) * 4
         self.rebuild()
 
     def render_line(self, y: int) -> Strip:

@@ -37,10 +37,8 @@ class MonolineApp(App):
         yield StatusBar()
 
     def on_mount(self) -> None:
-        canvas = self.query_one(DrawCanvas)
-        self.document.width = max(canvas.size.width, 1) * 2
-        self.document.height = max(canvas.size.height, 1) * 4
-        self.document.dirty = False
+        # Document sizing happens in DrawCanvas.on_resize, once the canvas
+        # actually has its size (canvas.size is still 0x0 when Mount fires).
         self.update_status()
 
     # -- stroke pipeline (enriched by Tasks 5/6/8/9) --

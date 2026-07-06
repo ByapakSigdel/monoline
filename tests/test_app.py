@@ -27,6 +27,16 @@ async def test_undo_key_removes_stroke():
         assert len(app.document.strokes) == 1
 
 
+async def test_document_sized_from_canvas_after_layout():
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)):
+        canvas = app.query_one(DrawCanvas)
+        assert canvas.size.width > 0
+        assert app.document.width == canvas.size.width * 2
+        assert app.document.height == canvas.size.height * 4
+        assert app.document.dirty is False
+
+
 async def test_cell_to_dot_mapping():
     app = MonolineApp()
     async with app.run_test(size=(40, 12)):
