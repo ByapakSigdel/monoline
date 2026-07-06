@@ -101,6 +101,20 @@ async def test_eraser_tool_creates_erase_stroke():
         assert app.tool == "pen"
 
 
+async def test_symmetry_gesture_is_one_undo_unit():
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        canvas = app.query_one(DrawCanvas)
+        await pilot.press("s")  # vertical
+        assert app.symmetry == "vertical"
+        canvas.begin(2, 2, ctrl=False)
+        canvas.extend(8, 4, ctrl=False)
+        canvas.end()
+        assert len(app.document.strokes) == 2
+        await pilot.press("u")
+        assert app.document.strokes == []
+
+
 async def test_erase_removes_rendered_dots():
     from monoline.raster import render_cells
     app = MonolineApp()

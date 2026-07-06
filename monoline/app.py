@@ -14,6 +14,7 @@ from monoline.document import Document, Point, Stroke
 from monoline.palettes import PALETTES, get_palette
 from monoline.shapes import recognize
 from monoline.smoothing import smooth
+from monoline.symmetry import MODES, siblings
 
 
 class StatusBar(Static):
@@ -31,6 +32,7 @@ class MonolineApp(App):
         Binding("P", "prev_palette", "Palette back", show=False),
         Binding("d", "tool_pen", "Pen", show=False),
         Binding("e", "tool_erase", "Eraser", show=False),
+        Binding("s", "cycle_symmetry", "Symmetry", show=False),
     ] + [Binding(str(i + 1), f"pick_color({i})", "Color", show=False) for i in range(9)]
 
     def __init__(self, path: Optional[str] = None) -> None:
@@ -43,6 +45,7 @@ class MonolineApp(App):
         self.tool = "pen"
         self.smoothing = self.config.smoothing
         self.grid_on = False  # Task 10 toggles this
+        self.symmetry = "off"
 
     @property
     def pen_color(self) -> str:
@@ -65,13 +68,21 @@ class MonolineApp(App):
                          final: bool) -> List[Stroke]:
         pts = smooth(points, self.smoothing)
         if self.tool == "erase":
-            return [Stroke(points=pts, kind="erase", width=self.ERASER_WIDTH)]
-        mode = self.config.shape_correct
-        if final and (mode == "always" or (mode == "ctrl" and ctrl)):
-            snapped = recognize(pts, grid_spacing=8.0 if self.grid_on else None)
-            if snapped is not None:
-                pts = snapped
-        return [Stroke(points=pts, color=self.pen_color)]
+            base = Stroke(points=pts, kind="erase", width=self.ERASER_WIDTH)
+        else:
+            mode = self.config.shape_correct
+            if final and (mode == "always" or (mode == "ctrl" and ctrl)):
+                snapped = recognize(pts, grid_spacing=8.0 if self.grid_on else None)
+                if snapped is not None:
+                    pts = snapped
+            base = Stroke(points=pts, color=self.pen_color)
+
+        result = [base]
+        for pts2 in siblings(base.points, self.symmetry,
+                             self.document.width, self.document.height):
+            result.append(Stroke(points=pts2, color=base.color,
+                                 kind=base.kind, width=base.width))
+        return result
 
     def finalize_stroke(self, points: List[Point], ctrl: bool) -> List[Stroke]:
         return self._gesture_strokes(points, ctrl, final=True)
@@ -87,6 +98,10 @@ class MonolineApp(App):
 
     def action_tool_erase(self) -> None:
         self.tool = "erase"
+        self.update_status()
+
+    def action_cycle_symmetry(self) -> None:
+        self.symmetry = MODES[(MODES.index(self.symmetry) + 1) % len(MODES)]
         self.update_status()
 
     def action_undo(self) -> None:
@@ -132,7 +147,8 @@ class MonolineApp(App):
         dirty = "●" if self.document.dirty else " "
         name = os.path.basename(self.path) if self.path else "untitled"
         self.query_one(StatusBar).update(
-            f" {self.tool}  {self.palette.name} {swatches}  {name} {dirty}  ? help"
+            f" {self.tool}  {self.palette.name} {swatches}  sym:{self.symmetry}"
+            f"  {name} {dirty}  ? help"
         )
 
 
