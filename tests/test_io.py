@@ -3,6 +3,7 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
+from monoline.bitmap import Bitmap
 from monoline.document import Document, Stroke
 from monoline.io import MonolineError, export_ansi, export_svg, load, save
 
@@ -169,3 +170,29 @@ def test_export_svg_structure():
     assert lines[0].get("stroke-width") == "1.5"
     assert lines[1].get("stroke") == "#101010"  # erase = background color
     assert lines[1].get("stroke-width") == "6.0"
+
+
+def test_export_svg_bitmap_dots_beneath_strokes():
+    doc = Document(16, 8, background="#000000")
+    doc.set_bitmap(Bitmap(16, 8, {(0, 0): (0x01 | 0x08, "#00ff00")}))
+    doc.add_strokes([Stroke(points=[(0.0, 0.0), (4.0, 4.0)], color="#ffffff")])
+    svg = export_svg(doc)
+    root = ET.fromstring(svg)
+    ns = "{http://www.w3.org/2000/svg}"
+    children = list(root)
+    kinds = [c.tag.replace(ns, "") for c in children]
+    assert kinds == ["rect", "circle", "circle", "polyline"]  # dots before strokes
+    c0 = children[1]
+    assert c0.get("fill") == "#00ff00"
+    assert c0.get("r") == "0.55"
+    assert (c0.get("cx"), c0.get("cy")) == ("0.5", "0.5")   # dot (0,0)
+    c1 = children[2]
+    assert (c1.get("cx"), c1.get("cy")) == ("1.5", "0.5")   # dot 4 = (1,0)
+
+
+def test_export_svg_no_bitmap_unchanged():
+    doc = Document(16, 8)
+    doc.add_strokes([Stroke(points=[(0.0, 0.0), (4.0, 4.0)])])
+    root = ET.fromstring(export_svg(doc))
+    ns = "{http://www.w3.org/2000/svg}"
+    assert root.find(f"{ns}circle") is None

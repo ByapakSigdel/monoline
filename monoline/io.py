@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Tuple, Union
 
 from monoline.document import Document, Stroke
-from monoline.raster import render_cells
+from monoline.raster import DOT_BITS, render_cells
 
 FORMAT = "monoline"
 VERSION = 1
@@ -133,6 +133,12 @@ def export_svg(document: Document) -> str:
         f'<rect width="{document.width}" height="{document.height}" '
         f'fill="{document.background}"/>',
     ]
+    if document.bitmap is not None:
+        for (cx, cy), (bits, color) in sorted(document.bitmap.cells.items()):
+            for (dx, dy), bit in sorted(DOT_BITS.items()):
+                if bits & bit:
+                    x, y = cx * 2 + dx + 0.5, cy * 4 + dy + 0.5
+                    parts.append(f'<circle cx="{x}" cy="{y}" r="0.55" fill="{color}"/>')
     for s in document.strokes:
         color = document.background if s.kind == "erase" else s.color
         width = s.width if s.kind == "erase" else 1.5
