@@ -76,6 +76,7 @@ class DrawCanvas(Widget):
             self.document.width = max(self.size.width, 1) * 2
             self.document.height = max(self.size.height, 1) * 4
         self.rebuild()
+        self.app.apply_pending_import()
 
     def render_line(self, y: int) -> Strip:
         segments = []

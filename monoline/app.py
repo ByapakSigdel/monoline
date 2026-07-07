@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import os
-from typing import List, Optional
+from pathlib import Path
+from typing import List, Optional, Union
 
+from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.widgets import Static
@@ -18,6 +20,8 @@ from monoline.palettes import PALETTES, get_palette
 from monoline.shapes import recognize
 from monoline.smoothing import smooth
 from monoline.symmetry import MODES, siblings
+
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}
 
 
 class StatusBar(Static):
@@ -41,11 +45,15 @@ class MonolineApp(App):
         Binding("x", "export", "Export", show=False),
         Binding("question_mark", "help", "Help", show=False),
         Binding("c", "clear", "Clear", show=False),
+        Binding("i", "import_image", "Import", show=False),
+        Binding("v", "paste_image", "Paste image", show=False),
     ] + [Binding(str(i + 1), f"pick_color({i})", "Color", show=False) for i in range(9)]
 
-    def __init__(self, path: Optional[str] = None) -> None:
+    def __init__(self, path: Optional[str] = None,
+                 import_path: Optional[str] = None) -> None:
         super().__init__()
         self.path = path
+        self.pending_import = import_path
         self.document = Document(0, 0)  # sized on mount, unless loaded below
         self.config = load_config()
         if path is not None and os.path.exists(path):
@@ -200,6 +208,65 @@ class MonolineApp(App):
             return
         self.notify(f"exported {os.path.basename(name)}")
 
+    def apply_pending_import(self) -> None:
+        if self.pending_import is None:
+            return
+        path, self.pending_import = self.pending_import, None
+        self._import_image(path)
+
+    def _import_image(self, source: Union[str, "Image.Image"]) -> None:
+        from PIL import Image, UnidentifiedImageError
+        from monoline.imageconv import convert
+        name = "clipboard image"
+        try:
+            if isinstance(source, Image.Image):
+                img = source
+            else:
+                name = os.path.basename(str(source))
+                img = Image.open(source)
+            bitmap = convert(img, self.document.width,
+                             self.document.height, self.document.background)
+        except (UnidentifiedImageError, OSError, ValueError) as exc:
+            self.notify(f"import failed: {exc}", severity="error")
+            return
+        self.document.set_bitmap(bitmap)
+        self.query_one(DrawCanvas).rebuild()
+        self.update_status()
+        self.notify(f"imported {name}")
+
+    def on_paste(self, event: events.Paste) -> None:
+        text = event.text.strip().strip('"').strip("'")
+        p = Path(text)
+        if p.suffix.lower() in IMAGE_SUFFIXES and p.is_file():
+            event.stop()
+            self._import_image(str(p))
+
+    def action_import_image(self) -> None:
+        self.push_screen(TextPrompt("Import image:", "photo.png"),
+                         self._on_import_name)
+
+    def _on_import_name(self, name) -> None:
+        if name:
+            self._import_image(name)
+
+    def action_paste_image(self) -> None:
+        from PIL import Image as PILImage
+        try:
+            from PIL import ImageGrab
+            data = ImageGrab.grabclipboard()
+        except Exception as exc:  # NotImplementedError, missing xclip/wl-paste
+            self.notify(f"clipboard unavailable: {exc}", severity="error")
+            return
+        if isinstance(data, PILImage.Image):
+            self._import_image(data)
+            return
+        if isinstance(data, list):
+            for item in data:
+                if Path(str(item)).suffix.lower() in IMAGE_SUFFIXES:
+                    self._import_image(str(item))
+                    return
+        self.notify("no image in the clipboard")
+
     def _apply_palette(self, switch: bool = False) -> None:
         canvas = self.query_one(DrawCanvas)
         if switch or not self.document.strokes:
@@ -238,4 +305,7 @@ class MonolineApp(App):
 
 
 def run(path: Optional[str] = None) -> None:
-    MonolineApp(path).run(mouse=True)
+    if path is not None and Path(path).suffix.lower() in IMAGE_SUFFIXES:
+        MonolineApp(None, import_path=path).run(mouse=True)
+    else:
+        MonolineApp(path).run(mouse=True)

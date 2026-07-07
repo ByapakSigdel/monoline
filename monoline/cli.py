@@ -13,7 +13,7 @@ def main(argv: list | None = None) -> int:
         description="Aesthetic drawing in your terminal.",
     )
     parser.add_argument("file", nargs="?", default=None,
-                        help="a .mono.json file to open or create")
+                        help="a .mono.json drawing or an image (.png/.jpg/...) to import")
     parser.add_argument("--version", action="version",
                         version=f"monoline {__version__}")
     args = parser.parse_args(argv)

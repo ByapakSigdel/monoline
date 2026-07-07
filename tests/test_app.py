@@ -207,3 +207,91 @@ async def test_erase_removes_rendered_dots():
         cells = render_cells(app.document.strokes,
                              app.document.width, app.document.height)
         assert cells == {}
+
+
+import pytest
+from PIL import Image
+from textual import events
+
+
+@pytest.fixture
+def png(tmp_path):
+    p = tmp_path / "pic.png"
+    Image.new("RGB", (10, 10), (255, 255, 255)).save(p)
+    return str(p)
+
+
+async def test_paste_image_path_imports(png):
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        app.post_message(events.Paste(f'"{png}"'))
+        await pilot.pause()
+        assert app.document.bitmap is not None
+
+
+async def test_paste_non_image_ignored():
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        app.post_message(events.Paste("just some text"))
+        await pilot.pause()
+        assert app.document.bitmap is None
+
+
+async def test_import_dialog_and_callback(png):
+    from monoline.dialogs import TextPrompt
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        await pilot.press("i")
+        assert isinstance(app.screen, TextPrompt)
+        await pilot.press("escape")
+        app._on_import_name(png)
+        await pilot.pause()
+        assert app.document.bitmap is not None
+
+
+async def test_clipboard_image_imports(monkeypatch, png):
+    from PIL import ImageGrab
+    monkeypatch.setattr(ImageGrab, "grabclipboard",
+                        lambda: Image.open(png))
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        await pilot.press("v")
+        await pilot.pause()
+        assert app.document.bitmap is not None
+
+
+async def test_clipboard_empty_notifies(monkeypatch):
+    from PIL import ImageGrab
+    monkeypatch.setattr(ImageGrab, "grabclipboard", lambda: None)
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        await pilot.press("v")
+        await pilot.pause()
+        assert app.document.bitmap is None
+
+
+async def test_cli_import_path_applies_after_layout(png):
+    app = MonolineApp(None, import_path=png)
+    async with app.run_test(size=(40, 12)) as pilot:
+        await pilot.pause()
+        assert app.document.bitmap is not None
+        assert app.document.bitmap.width == app.document.width
+
+
+async def test_import_is_one_undo_step(png):
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        app._import_image(png)
+        await pilot.press("u")
+        assert app.document.bitmap is None
+
+
+async def test_import_failure_notifies_no_crash(tmp_path):
+    bad = tmp_path / "not_an_image.png"
+    bad.write_text("hello")
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        app._import_image(str(bad))
+        await pilot.pause()
+        assert app.document.bitmap is None
+        assert app.is_running

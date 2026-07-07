@@ -16,6 +16,7 @@ KEYMAP = """\
  g               grid          u / Ctrl+Z  undo
  r / Ctrl+Y      redo          Ctrl+S      save
  x               export (.txt ANSI / .svg) c  clear
+ i               import image  v           paste image
  ?               this help     q           quit
 """
 
