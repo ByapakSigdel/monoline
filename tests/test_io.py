@@ -196,3 +196,63 @@ def test_export_svg_no_bitmap_unchanged():
     root = ET.fromstring(export_svg(doc))
     ns = "{http://www.w3.org/2000/svg}"
     assert root.find(f"{ns}circle") is None
+
+
+def test_v2_round_trip_with_bitmap(tmp_path):
+    p = tmp_path / "img.mono.json"
+    doc = make_doc()
+    doc.set_bitmap(Bitmap(320, 192, {(2, 3): (129, "#aabbcc"), (0, 0): (255, "#ffffff")}))
+    save(doc, "tokyonight", p)
+    data = json.loads(p.read_text(encoding="utf-8"))
+    assert data["version"] == 2
+    assert data["bitmap"]["cells"][0] == [0, 0, 255, "#ffffff"]  # sorted
+    doc2, _ = load(p)
+    assert doc2.bitmap is not None
+    assert doc2.bitmap.cells == doc.bitmap.cells
+    assert (doc2.bitmap.width, doc2.bitmap.height) == (320, 192)
+
+
+def test_no_bitmap_still_writes_version_1(tmp_path):
+    p = tmp_path / "plain.mono.json"
+    save(make_doc(), "tokyonight", p)
+    assert json.loads(p.read_text(encoding="utf-8"))["version"] == 1
+
+
+def test_v1_with_bitmap_rejected(tmp_path):
+    p = tmp_path / "bad.json"
+    p.write_text(json.dumps({"format": "monoline", "version": 1, "width": 8,
+                             "height": 8, "background": "#101010",
+                             "palette": "tokyonight", "strokes": [],
+                             "bitmap": {"width": 8, "height": 8, "cells": []}}))
+    with pytest.raises(MonolineError):
+        load(p)
+
+
+def test_v2_without_bitmap_rejected(tmp_path):
+    p = tmp_path / "bad.json"
+    p.write_text(json.dumps({"format": "monoline", "version": 2, "width": 8,
+                             "height": 8, "background": "#101010",
+                             "palette": "tokyonight", "strokes": []}))
+    with pytest.raises(MonolineError):
+        load(p)
+
+
+def _v2(bitmap):
+    return {"format": "monoline", "version": 2, "width": 8, "height": 8,
+            "background": "#101010", "palette": "tokyonight", "strokes": [],
+            "bitmap": bitmap}
+
+
+@pytest.mark.parametrize("bitmap", [
+    {"width": 8, "height": 8, "cells": [[0, 0, 0, "#ffffff"]]},     # bits 0
+    {"width": 8, "height": 8, "cells": [[0, 0, 256, "#ffffff"]]},   # bits > 255
+    {"width": 8, "height": 8, "cells": [[9, 0, 1, "#ffffff"]]},     # col out of grid
+    {"width": 8, "height": 8, "cells": [[0, 0, 1, "nothex"]]},      # bad color
+    {"width": 0, "height": 8, "cells": []},                          # bad dims
+    {"width": 8, "height": 8, "cells": [[0, 0, 1, "#ffffff"]] * 9}, # count > 4*2
+])
+def test_v2_bitmap_validation(tmp_path, bitmap):
+    p = tmp_path / "bad.json"
+    p.write_text(json.dumps(_v2(bitmap)))
+    with pytest.raises(MonolineError):
+        load(p)

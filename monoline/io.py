@@ -8,11 +8,12 @@ import re
 from pathlib import Path
 from typing import Tuple, Union
 
+from monoline.bitmap import Bitmap
 from monoline.document import Document, Stroke
 from monoline.raster import DOT_BITS, render_cells
 
 FORMAT = "monoline"
-VERSION = 1
+VERSIONS = (1, 2)
 
 _HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -42,7 +43,7 @@ class MonolineError(Exception):
 def save(document: Document, palette_name: str, path: Union[str, Path]) -> None:
     data = {
         "format": FORMAT,
-        "version": VERSION,
+        "version": 1,
         "width": document.width,
         "height": document.height,
         "background": document.background,
@@ -53,6 +54,15 @@ def save(document: Document, palette_name: str, path: Union[str, Path]) -> None:
             for s in document.strokes
         ],
     }
+    if document.bitmap is not None:
+        data["version"] = 2
+        data["bitmap"] = {
+            "width": document.bitmap.width,
+            "height": document.bitmap.height,
+            "cells": [[cx, cy, bits, color]
+                      for (cx, cy), (bits, color)
+                      in sorted(document.bitmap.cells.items())],
+        }
     path = Path(path)
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(data), encoding="utf-8")
@@ -67,10 +77,15 @@ def load(path: Union[str, Path]) -> Tuple[Document, str]:
         raise MonolineError(f"cannot read {path}: {exc}") from exc
     if not isinstance(data, dict) or data.get("format") != FORMAT:
         raise MonolineError(f"{path} is not a monoline file")
-    if data.get("version") != VERSION:
+    version = data.get("version")
+    if version not in VERSIONS:
         raise MonolineError(
-            f"{path} uses format version {data.get('version')}; "
-            f"this monoline supports version {VERSION}")
+            f"{path} uses format version {version}; "
+            f"this monoline supports versions {VERSIONS}")
+    if version == 1 and "bitmap" in data:
+        raise MonolineError(f"{path} is corrupt: version 1 cannot carry a bitmap")
+    if version == 2 and "bitmap" not in data:
+        raise MonolineError(f"{path} is corrupt: version 2 requires a bitmap")
     try:
         width = int(_finite(data["width"], 100_000))
         height = int(_finite(data["height"], 100_000))
@@ -88,11 +103,33 @@ def load(path: Union[str, Path]) -> Tuple[Document, str]:
                 points=[(_finite(x, 1e6), _finite(y, 1e6)) for x, y in s["points"]],
                 color=_color(s["color"]), kind=str(s["kind"]), width=width_))
         doc.strokes = strokes
+        doc.bitmap = _bitmap_from_json(data["bitmap"]) if version == 2 else None
         palette = str(data.get("palette", "tokyonight"))
     except (KeyError, TypeError, ValueError, OverflowError) as exc:
         raise MonolineError(f"{path} is corrupt: {exc}") from exc
     doc.dirty = False
     return doc, palette
+
+
+def _bitmap_from_json(b) -> Bitmap:
+    w = int(_finite(b["width"], 100_000))
+    h = int(_finite(b["height"], 100_000))
+    if w <= 0 or h <= 0:
+        raise ValueError("bitmap dimensions must be positive")
+    cols, rows = w // 2, h // 4
+    entries = b["cells"]
+    if not isinstance(entries, list) or len(entries) > cols * rows:
+        raise ValueError("bitmap cell list invalid")
+    cells = {}
+    for entry in entries:
+        cx, cy, bits, color = entry
+        cx, cy, bits = int(cx), int(cy), int(bits)
+        if not (0 <= cx < cols and 0 <= cy < rows):
+            raise ValueError(f"bitmap cell ({cx},{cy}) out of range")
+        if not (1 <= bits <= 255):
+            raise ValueError(f"bitmap bits {bits} out of range")
+        cells[(cx, cy)] = (bits, _color(color))
+    return Bitmap(w, h, cells)
 
 
 def _hex_to_rgb(color: str):
