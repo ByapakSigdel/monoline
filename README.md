@@ -5,7 +5,14 @@ shape correction, curated palettes, symmetry, and a dot grid.
 
 [![CI](https://github.com/ByapakSigdel/monoline/actions/workflows/ci.yml/badge.svg)](https://github.com/ByapakSigdel/monoline/actions/workflows/ci.yml)
 
-> 🚧 Under construction — screenshot coming soon.
+![monoline drawing demo](docs/assets/demo-drawing.gif)
+
+*Freehand drawing with live smoothing — hold **Ctrl** and a rough circle
+snaps to a perfect one; symmetry mirrors strokes as you draw.*
+
+| | |
+|---|---|
+| ![drawing](docs/assets/screenshot-drawing.svg) | ![import](docs/assets/screenshot-import.svg) |
 
 ## Install
 
@@ -35,9 +42,24 @@ in-app cheat sheet, `c` to clear, `q` to quit.
 | `r` / Ctrl+Y | redo |
 | Ctrl+S | save |
 | `x` | export (`.txt` = ANSI, `.svg` = SVG) |
+| `i` | import image (path prompt) |
+| `v` | paste image from clipboard |
 | `c` | clear the canvas (asks to confirm) |
 | `?` | this help overlay (escape or `?` to close) |
 | `q` | quit (asks to confirm if there are unsaved changes) |
+
+## Import images
+
+Drop any image file onto the terminal (or press `i` for a path prompt,
+`v` to paste one from the clipboard, or run `monoline photo.png`) and it
+becomes braille art you can draw over — Floyd-Steinberg dithered, with
+24-bit color per cell. A braille cell's eight dots share one color, so
+chroma resolution is per-cell: that's the medium, not a bug. Erasing over
+an image hides its dots non-destructively; undo brings the import back.
+
+On Linux, clipboard paste needs `xclip` (X11) or `wl-clipboard` (Wayland).
+
+![image import demo](docs/assets/demo-import.gif)
 
 ## Palettes
 
