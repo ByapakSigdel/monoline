@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import math
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
+from monoline.bitmap import Bitmap
 from monoline.document import Point, Stroke
 
 BRAILLE_BASE = 0x2800
@@ -39,9 +40,17 @@ def _disc_offsets(radius: float) -> List[Tuple[int, int]]:
             if dx * dx + dy * dy <= radius * radius]
 
 
-def render_cells(strokes: Iterable[Stroke], width: int, height: int
+def render_cells(strokes: Iterable[Stroke], width: int, height: int,
+                 bitmap: Optional[Bitmap] = None
                  ) -> Dict[Tuple[int, int], Tuple[str, str]]:
     dots: Dict[Tuple[int, int], Tuple[int, str]] = {}  # (x,y) -> (seq, color)
+    if bitmap is not None:
+        for (cx, cy), (bits, color) in bitmap.cells.items():
+            for (dx, dy), bit in DOT_BITS.items():
+                if bits & bit:
+                    px, py = cx * 2 + dx, cy * 4 + dy
+                    if 0 <= px < width and 0 <= py < height:
+                        dots[(px, py)] = (0, color)
     seq = 0
     for stroke in strokes:
         seq += 1

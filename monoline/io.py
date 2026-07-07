@@ -100,7 +100,7 @@ def _hex_to_rgb(color: str):
 
 
 def export_ansi(document: Document) -> str:
-    cells = render_cells(document.strokes, document.width, document.height)
+    cells = render_cells(document.strokes, document.width, document.height, bitmap=document.bitmap)
     cols, rows = document.width // 2, document.height // 4
     lines = []
     for y in range(rows):

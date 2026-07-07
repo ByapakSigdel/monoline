@@ -41,3 +41,40 @@ def test_clipping_outside_canvas():
     s = Stroke(points=[(-5.0, -5.0), (100.0, 100.0)], color="#ffffff")
     cells = render_cells([s], 8, 8)
     assert all(0 <= c < 4 and 0 <= r < 2 for c, r in cells)
+
+
+from monoline.bitmap import Bitmap
+
+
+def test_bitmap_seeds_cells():
+    bm = Bitmap(8, 8, {(0, 0): (0x01, "#112233"), (1, 1): (0xFF, "#445566")})
+    cells = render_cells([], 8, 8, bitmap=bm)
+    assert cells[(0, 0)] == ("⠁", "#112233")
+    assert cells[(1, 1)] == ("⣿", "#445566")
+
+
+def test_pen_stroke_wins_over_bitmap():
+    bm = Bitmap(8, 8, {(0, 0): (0x01, "#111111")})
+    pen = Stroke(points=[(1.0, 0.0)], color="#ff0000")  # same cell, dot 4
+    cells = render_cells([pen], 8, 8, bitmap=bm)
+    char, color = cells[(0, 0)]
+    assert ord(char) - 0x2800 == 0x01 | 0x08  # bits merge
+    assert color == "#ff0000"  # stroke color wins
+
+
+def test_erase_clears_bitmap_dots_nondestructively():
+    bm = Bitmap(8, 8, {(0, 0): (0xFF, "#ffffff")})
+    rub = Stroke(points=[(0.5, 1.5)], kind="erase", width=8.0)
+    cells = render_cells([rub], 8, 8, bitmap=bm)
+    assert (0, 0) not in cells
+    assert bm.cells[(0, 0)] == (0xFF, "#ffffff")  # source data untouched
+
+
+def test_bitmap_cells_outside_canvas_clipped():
+    bm = Bitmap(100, 100, {(30, 20): (0xFF, "#ffffff")})  # beyond an 8x8 canvas
+    assert render_cells([], 8, 8, bitmap=bm) == {}
+
+
+def test_no_bitmap_behaves_as_before():
+    s = Stroke(points=[(0.0, 0.0)], color="#ff0000")
+    assert render_cells([s], 8, 8) == {(0, 0): ("⠁", "#ff0000")}
