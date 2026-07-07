@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Tuple
+from typing import List, Optional, Tuple
+
+from monoline.bitmap import Bitmap
 
 Point = Tuple[float, float]
 
@@ -21,8 +23,15 @@ class _AddStrokes:
 
 
 @dataclass
+class _SetBitmap:
+    previous: Optional[Bitmap]
+    new: Optional[Bitmap]
+
+
+@dataclass
 class _Clear:
     previous: List[Stroke]
+    previous_bitmap: Optional[Bitmap] = None
 
 
 class Document:
@@ -31,6 +40,7 @@ class Document:
         self.height = height
         self.background = background
         self.strokes: List[Stroke] = []
+        self.bitmap: Optional[Bitmap] = None
         self._undo: list = []
         self._redo: list = []
         self.dirty = False
@@ -43,11 +53,20 @@ class Document:
         self._redo.clear()
         self.dirty = True
 
-    def clear(self) -> None:
-        if not self.strokes:
+    def set_bitmap(self, bitmap: Optional[Bitmap]) -> None:
+        if bitmap is None and self.bitmap is None:
             return
-        self._undo.append(_Clear(list(self.strokes)))
+        self._undo.append(_SetBitmap(self.bitmap, bitmap))
+        self.bitmap = bitmap
+        self._redo.clear()
+        self.dirty = True
+
+    def clear(self) -> None:
+        if not self.strokes and self.bitmap is None:
+            return
+        self._undo.append(_Clear(list(self.strokes), self.bitmap))
         self.strokes.clear()
+        self.bitmap = None
         self._redo.clear()
         self.dirty = True
 
@@ -57,8 +76,11 @@ class Document:
         op = self._undo.pop()
         if isinstance(op, _AddStrokes):
             del self.strokes[-len(op.strokes):]
+        elif isinstance(op, _SetBitmap):
+            self.bitmap = op.previous
         else:
             self.strokes.extend(op.previous)
+            self.bitmap = op.previous_bitmap
         self._redo.append(op)
         self.dirty = True
         return True
@@ -69,8 +91,11 @@ class Document:
         op = self._redo.pop()
         if isinstance(op, _AddStrokes):
             self.strokes.extend(op.strokes)
+        elif isinstance(op, _SetBitmap):
+            self.bitmap = op.new
         else:
             self.strokes.clear()
+            self.bitmap = None
         self._undo.append(op)
         self.dirty = True
         return True

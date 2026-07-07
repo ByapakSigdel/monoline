@@ -48,3 +48,68 @@ def test_clear_empty_is_noop():
     doc = Document(80, 40)
     doc.clear()
     assert doc.undo() is False
+
+
+from monoline.bitmap import Bitmap
+
+
+BM1 = Bitmap(80, 40, {(0, 0): (255, "#ffffff")})
+BM2 = Bitmap(80, 40, {(1, 1): (1, "#ff0000")})
+
+
+def test_set_bitmap_undo_redo():
+    doc = Document(80, 40)
+    doc.set_bitmap(BM1)
+    assert doc.bitmap is BM1 and doc.dirty is True
+    doc.set_bitmap(BM2)  # replace
+    assert doc.bitmap is BM2
+    doc.undo()
+    assert doc.bitmap is BM1
+    doc.undo()
+    assert doc.bitmap is None
+    doc.redo()
+    assert doc.bitmap is BM1
+    doc.redo()
+    assert doc.bitmap is BM2
+
+
+def test_set_bitmap_none_when_none_is_noop():
+    doc = Document(80, 40)
+    doc.set_bitmap(None)
+    assert doc.undo() is False
+
+
+def test_set_bitmap_remove_is_undoable():
+    doc = Document(80, 40)
+    doc.set_bitmap(BM1)
+    doc.set_bitmap(None)
+    assert doc.bitmap is None
+    doc.undo()
+    assert doc.bitmap is BM1
+
+
+def test_clear_takes_bitmap_and_strokes_one_op():
+    doc = Document(80, 40)
+    doc.add_strokes([stroke((0, 0), (1, 1))])
+    doc.set_bitmap(BM1)
+    doc.clear()
+    assert doc.strokes == [] and doc.bitmap is None
+    doc.undo()
+    assert len(doc.strokes) == 1 and doc.bitmap is BM1
+
+
+def test_clear_bitmap_only_not_noop():
+    doc = Document(80, 40)
+    doc.set_bitmap(BM1)
+    doc.clear()
+    assert doc.bitmap is None
+    doc.undo()
+    assert doc.bitmap is BM1
+
+
+def test_set_bitmap_clears_redo():
+    doc = Document(80, 40)
+    doc.add_strokes([stroke((0, 0))])
+    doc.undo()
+    doc.set_bitmap(BM1)
+    assert doc.redo() is False
