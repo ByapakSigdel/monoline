@@ -51,6 +51,7 @@ def test_clear_empty_is_noop():
 
 
 from monoline.bitmap import Bitmap
+from monoline.model3d import Model3DState
 
 
 BM1 = Bitmap(80, 40, {(0, 0): (255, "#ffffff")})
@@ -113,3 +114,75 @@ def test_set_bitmap_clears_redo():
     doc.undo()
     doc.set_bitmap(BM1)
     assert doc.redo() is False
+
+
+def test_set_video_clears_bitmap():
+    doc = Document(80, 40)
+    doc.set_bitmap(BM1)
+    doc.set_video("/tmp/clip.mp4")
+    assert doc.bitmap is None
+    assert doc.video_path == "/tmp/clip.mp4"
+    assert doc.playback_bitmap is None
+
+
+def test_set_bitmap_clears_video():
+    doc = Document(80, 40)
+    doc.set_video("/tmp/clip.mp4")
+    doc.set_bitmap(BM1)
+    assert doc.video_path is None
+    assert doc.bitmap is BM1
+
+
+def test_set_video_undo_redo():
+    doc = Document(80, 40)
+    doc.set_video("/tmp/a.mp4")
+    doc.set_video("/tmp/b.mp4")
+    doc.undo()
+    assert doc.video_path == "/tmp/a.mp4"
+    doc.undo()
+    assert doc.video_path is None
+    doc.redo()
+    assert doc.video_path == "/tmp/a.mp4"
+
+
+def test_display_bitmap_prefers_playback():
+    doc = Document(80, 40)
+    doc.set_bitmap(BM1)
+    live = Bitmap(80, 40, {(2, 2): (255, "#0000ff")})
+    doc.set_playback_bitmap(live)
+    assert doc.display_bitmap is live
+
+
+def test_clear_removes_video():
+    doc = Document(80, 40)
+    doc.set_video("/tmp/a.mp4")
+    doc.clear()
+    assert doc.video_path is None
+    doc.undo()
+    assert doc.video_path == "/tmp/a.mp4"
+
+
+def test_set_model3d_clears_bitmap():
+    doc = Document(80, 40)
+    doc.set_bitmap(BM1)
+    doc.set_model3d(Model3DState(path="/tmp/m.obj"))
+    assert doc.bitmap is None
+    assert doc.model3d is not None
+
+
+def test_set_model3d_undo_redo():
+    from monoline.model3d import Model3DState
+    doc = Document(80, 40)
+    doc.set_model3d(Model3DState(path="/tmp/a.obj"))
+    doc.undo()
+    assert doc.model3d is None
+    doc.redo()
+    assert doc.model3d.path == "/tmp/a.obj"
+
+
+def test_display_bitmap_prefers_model():
+    doc = Document(80, 40)
+    doc.set_bitmap(BM1)
+    live = Bitmap(80, 40, {(2, 2): (255, "#0000ff")})
+    doc.set_model_bitmap(live)
+    assert doc.display_bitmap is live

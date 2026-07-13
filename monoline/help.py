@@ -16,7 +16,8 @@ KEYMAP = """\
  g               grid          u / Ctrl+Z  undo
  r / Ctrl+Y      redo          Ctrl+S      save
  x               export (.txt ANSI / .svg) c  clear
- i               import image  v           paste image
+ i          import image/video/3D  v   paste media
+ Shift+drag rotate & move 3D model (when loaded)
  ?               this help     q           quit
 """
 

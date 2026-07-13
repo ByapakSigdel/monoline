@@ -42,24 +42,39 @@ in-app cheat sheet, `c` to clear, `q` to quit.
 | `r` / Ctrl+Y | redo |
 | Ctrl+S | save |
 | `x` | export (`.txt` = ANSI, `.svg` = SVG) |
-| `i` | import image (path prompt) |
+| `i` | import image, video, or 3D model (path prompt) |
 | `v` | paste image from clipboard |
+| Shift+drag | rotate and move a loaded 3D model |
 | `c` | clear the canvas (asks to confirm) |
 | `?` | this help overlay (escape or `?` to close) |
 | `q` | quit (asks to confirm if there are unsaved changes) |
 
-## Import images
+## Import images and video
 
-Drop any image file onto the terminal (or press `i` for a path prompt,
-`v` to paste one from the clipboard, or run `monoline photo.png`) and it
-becomes braille art you can draw over — Floyd-Steinberg dithered, with
-24-bit color per cell. A braille cell's eight dots share one color, so
-chroma resolution is per-cell: that's the medium, not a bug. Erasing over
-an image hides its dots non-destructively; undo brings the import back.
+Drop any image or video file onto the terminal (or press `i` for a path prompt,
+`v` to paste one from the clipboard, or run `monoline photo.png` /
+`monoline clip.mp4`) and it becomes braille art you can draw over.
+Still images are Floyd-Steinberg dithered with 24-bit color per cell; videos
+and animated GIFs play back in braille in real time. A braille cell's eight
+dots share one color, so chroma resolution is per-cell: that's the medium,
+not a bug. Erasing over media hides its dots non-destructively; undo brings
+the import back.
 
+Supported video formats: MP4, WebM, MOV, AVI, MKV, M4V, and animated GIF.
 On Linux, clipboard paste needs `xclip` (X11) or `wl-clipboard` (Wayland).
 
 ![image import demo](docs/assets/demo-import.gif)
+
+## Import 3D models
+
+Drop a 3D model onto the terminal (or press `i` and enter a path, or run
+`monoline model.obj`) to open it in a braille viewport with a ground grid and
+axes. The model renders as a shaded wireframe you can draw over.
+
+**Shift+drag** with the mouse to rotate and move the model inside the viewport.
+Undo restores the previous pose or removes the import entirely.
+
+Supported formats: OBJ, STL, GLB, GLTF, PLY, and OFF.
 
 ## Palettes
 

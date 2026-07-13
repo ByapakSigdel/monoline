@@ -213,6 +213,8 @@ import pytest
 from PIL import Image
 from textual import events
 
+from monoline.model3d import copy_pose
+
 
 @pytest.fixture
 def png(tmp_path):
@@ -227,6 +229,24 @@ async def test_paste_image_path_imports(png):
         app.post_message(events.Paste(f'"{png}"'))
         await pilot.pause()
         assert app.document.bitmap is not None
+
+
+async def test_canvas_paste_image_path_imports(png):
+    """Drag-drop pastes go to the focused canvas, not the app."""
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        canvas = app.query_one(DrawCanvas)
+        canvas.post_message(events.Paste(png))
+        await pilot.pause()
+        assert app.document.bitmap is not None
+
+
+async def test_file_url_paste_imports(png):
+    from monoline.app import image_path_from_paste
+    from pathlib import Path
+
+    url = Path(png).as_uri()
+    assert image_path_from_paste(url) == png
 
 
 async def test_paste_non_image_ignored():
@@ -295,3 +315,96 @@ async def test_import_failure_notifies_no_crash(tmp_path):
         await pilot.pause()
         assert app.document.bitmap is None
         assert app.is_running
+
+
+@pytest.fixture
+def anim_gif(tmp_path):
+    p = tmp_path / "anim.gif"
+    frames = [
+        Image.new("RGB", (10, 10), (255, 0, 0)),
+        Image.new("RGB", (10, 10), (0, 255, 0)),
+    ]
+    frames[0].save(p, save_all=True, append_images=frames[1:],
+                   duration=100, loop=0)
+    return str(p)
+
+
+async def test_video_drop_imports(anim_gif):
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        canvas = app.query_one(DrawCanvas)
+        canvas.post_message(events.Paste(anim_gif))
+        await pilot.pause()
+        assert app.document.video_path == anim_gif
+        assert app.document.playback_bitmap is not None
+        assert app._video_player is not None
+
+
+async def test_video_undo_stops_playback(anim_gif):
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        app._import_video(anim_gif)
+        await pilot.pause()
+        assert app._video_player is not None
+        await pilot.press("u")
+        assert app.document.video_path is None
+        assert app._video_player is None
+
+
+async def test_static_gif_imports_as_image(static_gif):
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        app._import_media(static_gif)
+        await pilot.pause()
+        assert app.document.bitmap is not None
+        assert app.document.video_path is None
+
+
+@pytest.fixture
+def triangle_obj(tmp_path):
+    p = tmp_path / "tri.obj"
+    p.write_text(
+        "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n",
+        encoding="utf-8",
+    )
+    return str(p)
+
+
+async def test_model_drop_imports(triangle_obj):
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        canvas = app.query_one(DrawCanvas)
+        canvas.post_message(events.Paste(triangle_obj))
+        await pilot.pause()
+        assert app.document.model3d is not None
+        assert app.document.model_bitmap is not None
+
+
+async def test_shift_drag_updates_model_pose(triangle_obj):
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        app._import_model3d(triangle_obj)
+        before = copy_pose(app.document.model3d.pose)
+        before_cells = app.document.model_bitmap.cells
+        app.document.model3d.pose.yaw += 0.6
+        app.document.model3d.pose.pan_x += 8.0
+        app.rerender_model()
+        await pilot.pause()
+        assert app.document.model3d.pose.yaw != before.yaw
+        assert app.document.model_bitmap.cells != before_cells
+
+
+async def test_model_undo_removes_import(triangle_obj):
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        app._import_model3d(triangle_obj)
+        await pilot.press("u")
+        assert app.document.model3d is None
+        assert app.document.model_bitmap is None
+
+
+@pytest.fixture
+def static_gif(tmp_path):
+    p = tmp_path / "still.gif"
+    Image.new("RGB", (10, 10), (128, 128, 128)).save(p)
+    return str(p)

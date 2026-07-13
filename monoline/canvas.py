@@ -1,7 +1,8 @@
 """The drawing surface widget."""
 from __future__ import annotations
 
-from typing import Dict, List
+from copy import deepcopy
+from typing import Dict, List, Optional, Tuple
 
 from rich.segment import Segment
 from rich.style import Style
@@ -10,6 +11,7 @@ from textual.strip import Strip
 from textual.widget import Widget
 
 from monoline.document import Document, Point, Stroke
+from monoline.model3d import ModelPose, copy_pose
 from monoline.raster import render_cells
 
 
@@ -30,6 +32,9 @@ class DrawCanvas(Widget):
         self.can_focus = True
         self.grid_on = False
         self.grid_color = "#292e42"
+        self._model_drag: Optional[str] = None
+        self._model_last: Optional[Tuple[int, int]] = None
+        self._model_pose_start: Optional[ModelPose] = None
 
     # -- gesture API (mouse handlers delegate; tests call directly) --
 
@@ -65,7 +70,8 @@ class DrawCanvas(Widget):
 
     def rebuild(self) -> None:
         w, h = self.size.width * 2, self.size.height * 4
-        self._cells = render_cells(list(self.document.strokes) + self._live, w, h, bitmap=self.document.bitmap)
+        self._cells = render_cells(list(self.document.strokes) + self._live, w, h,
+                                   bitmap=self.document.display_bitmap)
         self.refresh()
 
     def on_resize(self, event: events.Resize) -> None:
@@ -86,7 +92,7 @@ class DrawCanvas(Widget):
                 if self.grid_on and x % 4 == 0 and y % 2 == 0:
                     segments.append(Segment("⠂", Style(color=self.grid_color)))
                 else:
-                    segments.append(Segment(" "))
+                    segments.append(Segment(" ", Style()))
             else:
                 char, color = cell
                 segments.append(Segment(char, Style(color=color)))
@@ -95,15 +101,45 @@ class DrawCanvas(Widget):
     # -- mouse --
 
     def on_mouse_down(self, event: events.MouseDown) -> None:
+        if event.shift and self.document.model3d is not None and event.button == 1:
+            self.capture_mouse()
+            self._model_drag = "manipulate"
+            self._model_last = (int(event.offset.x), int(event.offset.y))
+            self._model_pose_start = copy_pose(self.document.model3d.pose)
+            return
         if event.button != 1:
             return
         self.capture_mouse()
         self.begin(int(event.offset.x), int(event.offset.y), event.ctrl)
 
     def on_mouse_move(self, event: events.MouseMove) -> None:
+        if self._model_drag and self._model_last and self.document.model3d:
+            dx = int(event.offset.x) - self._model_last[0]
+            dy = int(event.offset.y) - self._model_last[1]
+            self._model_last = (int(event.offset.x), int(event.offset.y))
+            pose = self.document.model3d.pose
+            pose.yaw += dx * 0.04
+            pose.pitch += dy * 0.04
+            pose.pan_x += dx * 1.5
+            pose.pan_y += dy * 1.5
+            self.document.update_model_pose(pose)
+            self.app.rerender_model()
+            return
         if self._raw:
             self.extend(int(event.offset.x), int(event.offset.y), event.ctrl)
 
     def on_mouse_up(self, event: events.MouseUp) -> None:
+        if self._model_drag:
+            self.release_mouse()
+            if self._model_pose_start is not None and self.document.model3d is not None:
+                self.app.commit_model_pose(self._model_pose_start)
+            self._model_drag = None
+            self._model_last = None
+            self._model_pose_start = None
+            return
         self.release_mouse()
         self.end()
+
+    def on_paste(self, event: events.Paste) -> None:
+        if self.app.try_import_pasted_path(event.text):
+            event.stop()

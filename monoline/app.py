@@ -20,8 +20,46 @@ from monoline.palettes import PALETTES, get_palette
 from monoline.shapes import recognize
 from monoline.smoothing import smooth
 from monoline.symmetry import MODES, siblings
+from monoline.video import VIDEO_SUFFIXES, VideoPlayer, is_video_path
+from monoline.model3d import MODEL_SUFFIXES, Model3DState, is_model_path, load_mesh, render_model
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}
+MEDIA_SUFFIXES = IMAGE_SUFFIXES | VIDEO_SUFFIXES | MODEL_SUFFIXES
+
+
+def media_path_from_paste(text: str) -> Optional[str]:
+    """Extract an image or video file path from terminal paste / drag-drop."""
+    from urllib.parse import unquote, urlparse
+
+    text = text.strip().strip('"').strip("'")
+    if not text:
+        return None
+    # Windows Terminal may paste file:// URLs when dropping files.
+    if text.lower().startswith("file:"):
+        text = unquote(urlparse(text).path)
+        if len(text) >= 3 and text[0] == "/" and text[2] == ":":
+            text = text[1:]
+    for line in text.splitlines():
+        candidate = line.strip().strip('"').strip("'")
+        if candidate.lower().startswith("file:"):
+            candidate = unquote(urlparse(candidate).path)
+            if len(candidate) >= 3 and candidate[0] == "/" and candidate[2] == ":":
+                candidate = candidate[1:]
+        p = Path(candidate)
+        if not p.is_file():
+            continue
+        suffix = p.suffix.lower()
+        if suffix in MEDIA_SUFFIXES or is_video_path(str(p)) or is_model_path(str(p)):
+            return str(p)
+    return None
+
+
+def image_path_from_paste(text: str) -> Optional[str]:
+    """Extract an image file path (excludes video and 3D model paths)."""
+    path = media_path_from_paste(text)
+    if path is None or is_video_path(path) or is_model_path(path):
+        return None
+    return path
 
 
 class StatusBar(Static):
@@ -65,6 +103,9 @@ class MonolineApp(App):
         self.smoothing = self.config.smoothing
         self.grid_on = False  # Task 10 toggles this
         self.symmetry = "off"
+        self._video_player: Optional[VideoPlayer] = None
+        self._video_timer = None
+        self._mesh_cache: dict = {}
 
     @property
     def pen_color(self) -> str:
@@ -133,11 +174,15 @@ class MonolineApp(App):
 
     def action_undo(self) -> None:
         if self.document.undo():
+            self._sync_video_after_history()
+            self._sync_model_after_history()
             self.query_one(DrawCanvas).rebuild()
             self.update_status()
 
     def action_redo(self) -> None:
         if self.document.redo():
+            self._sync_video_after_history()
+            self._sync_model_after_history()
             self.query_one(DrawCanvas).rebuild()
             self.update_status()
 
@@ -145,12 +190,15 @@ class MonolineApp(App):
         self.push_screen(HelpScreen())
 
     def action_clear(self) -> None:
-        if not self.document.strokes:
+        if (not self.document.strokes and self.document.bitmap is None
+                and self.document.video_path is None
+                and self.document.model3d is None):
             return
         self.push_screen(Confirm("Clear the canvas?"), self._on_clear)
 
     def _on_clear(self, yes) -> None:
         if yes:
+            self._stop_video()
             self.document.clear()
             self.query_one(DrawCanvas).rebuild()
             self.update_status()
@@ -212,11 +260,20 @@ class MonolineApp(App):
         if self.pending_import is None:
             return
         path, self.pending_import = self.pending_import, None
-        self._import_image(path)
+        self._import_media(path)
+
+    def _import_media(self, path: str) -> None:
+        if is_model_path(path):
+            self._import_model3d(path)
+        elif is_video_path(path):
+            self._import_video(path)
+        else:
+            self._import_image(path)
 
     def _import_image(self, source: Union[str, "Image.Image"]) -> None:
         from PIL import Image, UnidentifiedImageError
         from monoline.imageconv import convert
+        self._stop_video()
         name = "clipboard image"
         try:
             if isinstance(source, Image.Image):
@@ -234,20 +291,126 @@ class MonolineApp(App):
         self.update_status()
         self.notify(f"imported {name}")
 
+    def _import_video(self, path: str) -> None:
+        self._stop_video()
+        name = os.path.basename(path)
+        try:
+            player = VideoPlayer(path, self.document.width,
+                                 self.document.height, self.document.background)
+        except (OSError, ValueError) as exc:
+            self.notify(f"import failed: {exc}", severity="error")
+            return
+        self.document.set_video(path)
+        self._video_player = player
+        self._tick_video_frame()
+        interval = 1.0 / player.fps
+        self._video_timer = self.set_interval(interval, self._tick_video_frame)
+        self.update_status()
+        self.notify(f"playing {name}")
+
+    def _import_model3d(self, path: str) -> None:
+        self._stop_video()
+        name = os.path.basename(path)
+        try:
+            mesh = load_mesh(path)
+            self._mesh_cache[path] = mesh
+        except (OSError, ValueError) as exc:
+            self.notify(f"import failed: {exc}", severity="error")
+            return
+        state = Model3DState(path=path, color=self.pen_color)
+        self.document.set_model3d(state)
+        self.rerender_model()
+        self.update_status()
+        self.notify(f"loaded {name} — Shift+drag to rotate and move")
+
+    def rerender_model(self) -> None:
+        state = self.document.model3d
+        if state is None:
+            self.document.set_model_bitmap(None)
+            self.query_one(DrawCanvas).rebuild()
+            return
+        mesh = self._mesh_cache.get(state.path)
+        if mesh is None:
+            try:
+                mesh = load_mesh(state.path)
+                self._mesh_cache[state.path] = mesh
+            except (OSError, ValueError):
+                return
+        vertices, faces = mesh
+        canvas = self.query_one(DrawCanvas)
+        bitmap = render_model(
+            vertices, faces, state.pose,
+            self.document.width, self.document.height,
+            self.palette.grid, state.color,
+        )
+        self.document.set_model_bitmap(bitmap)
+        canvas.rebuild()
+
+    def commit_model_pose(self, previous_pose) -> None:
+        self.document.commit_model_pose(previous_pose)
+
+    def _sync_model_after_history(self) -> None:
+        if self.document.model3d is None:
+            self.document.set_model_bitmap(None)
+            return
+        if self.document.model3d.path not in self._mesh_cache:
+            try:
+                self._mesh_cache[self.document.model3d.path] = load_mesh(
+                    self.document.model3d.path)
+            except (OSError, ValueError):
+                self.document.model3d = None
+                return
+        self.rerender_model()
+
+    def _tick_video_frame(self) -> None:
+        if self._video_player is None:
+            return
+        self.document.set_playback_bitmap(self._video_player.next_bitmap())
+        self.query_one(DrawCanvas).rebuild()
+
+    def _stop_video(self) -> None:
+        if self._video_timer is not None:
+            self._video_timer.stop()
+            self._video_timer = None
+        self._video_player = None
+        self.document.set_playback_bitmap(None)
+
+    def _start_video_playback(self) -> None:
+        path = self.document.video_path
+        if path is None:
+            return
+        try:
+            player = VideoPlayer(path, self.document.width,
+                                 self.document.height, self.document.background)
+        except (OSError, ValueError):
+            return
+        self._video_player = player
+        self._tick_video_frame()
+        self._video_timer = self.set_interval(1.0 / player.fps, self._tick_video_frame)
+
+    def _sync_video_after_history(self) -> None:
+        self._stop_video()
+        if self.document.video_path is not None:
+            self._start_video_playback()
+
+    def try_import_pasted_path(self, text: str) -> bool:
+        path = media_path_from_paste(text)
+        if path is None:
+            return False
+        self._import_media(path)
+        return True
+
     def on_paste(self, event: events.Paste) -> None:
-        text = event.text.strip().strip('"').strip("'")
-        p = Path(text)
-        if p.suffix.lower() in IMAGE_SUFFIXES and p.is_file():
+        if self.try_import_pasted_path(event.text):
             event.stop()
-            self._import_image(str(p))
 
     def action_import_image(self) -> None:
-        self.push_screen(TextPrompt("Import image:", "photo.png"),
+        self.push_screen(TextPrompt("Import image, video, or 3D model:", "photo.png"),
                          self._on_import_name)
 
     def _on_import_name(self, name) -> None:
         if name:
-            self._import_image(name)
+            self._import_media(name)
 
     def action_paste_image(self) -> None:
         from PIL import Image as PILImage
@@ -262,8 +425,10 @@ class MonolineApp(App):
             return
         if isinstance(data, list):
             for item in data:
-                if Path(str(item)).suffix.lower() in IMAGE_SUFFIXES:
-                    self._import_image(str(item))
+                p = str(item)
+                if (Path(p).suffix.lower() in MEDIA_SUFFIXES
+                        or is_video_path(p) or is_model_path(p)):
+                    self._import_media(p)
                     return
         self.notify("no image in the clipboard")
 
@@ -298,14 +463,17 @@ class MonolineApp(App):
         dirty = "●" if self.document.dirty else " "
         name = os.path.basename(self.path) if self.path else "untitled"
         grid = "  grid" if self.grid_on else ""
+        video = "  ▶" if self.document.video_path else ""
+        model = "  3D" if self.document.model3d else ""
         self.query_one(StatusBar).update(
             f" {self.tool}  {self.palette.name} {swatches}  sym:{self.symmetry}"
-            f"{grid}  {name} {dirty}  ? help"
+            f"{grid}{video}{model}  {name} {dirty}  ? help"
         )
 
 
 def run(path: Optional[str] = None) -> None:
-    if path is not None and Path(path).suffix.lower() in IMAGE_SUFFIXES:
+    if path is not None and (Path(path).suffix.lower() in MEDIA_SUFFIXES
+                             or is_video_path(path) or is_model_path(path)):
         MonolineApp(None, import_path=path).run(mouse=True)
     else:
         MonolineApp(path).run(mouse=True)
