@@ -1,7 +1,7 @@
 # monoline
 
 Aesthetic drawing in your terminal — smooth braille strokes, tldraw-style
-shape correction, curated palettes, symmetry, and a dot grid.
+shape correction, curated palettes, symmetry, reveal animations, and a dot grid.
 
 [![CI](https://github.com/ByapakSigdel/monoline/actions/workflows/ci.yml/badge.svg)](https://github.com/ByapakSigdel/monoline/actions/workflows/ci.yml)
 
@@ -44,6 +44,7 @@ in-app cheat sheet, `c` to clear, `q` to quit.
 | `x` | export (`.txt` = ANSI, `.svg` = SVG) |
 | `i` | import image, video, or 3D model (path prompt) |
 | `v` | paste image from clipboard |
+| `a` / `A` | play / cycle reveal animation |
 | Shift+drag | rotate and move a loaded 3D model |
 | `c` | clear the canvas (asks to confirm) |
 | `?` | this help overlay (escape or `?` to close) |
@@ -64,6 +65,25 @@ Supported video formats: MP4, WebM, MOV, AVI, MKV, M4V, and animated GIF.
 On Linux, clipboard paste needs `xclip` (X11) or `wl-clipboard` (Wayland).
 
 ![image import demo](docs/assets/demo-import.gif)
+
+## Reveal animations
+
+Press **`a`** to replay whatever is on the canvas — strokes, imports, and all —
+with a reveal animation. Press **`A`** (Shift+a) to cycle styles; press **`a`**
+again to stop early.
+
+| Style | Effect |
+| --- | --- |
+| `drop` | Braille blocks fall from above and land in place |
+| `rain` | Columns drop independently |
+| `scan_down` | Reveal top-to-bottom |
+| `scan_right` | Reveal left-to-right |
+| `scatter` | Cells fly in from random offsets |
+| `radial` | Expand outward from the center |
+| `pop` | Cells pop in one by one |
+
+Draw something (or import an image), then hit **`a`**. The status bar shows the
+current style (`anim:drop`, etc.).
 
 ## Import 3D models
 
