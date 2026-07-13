@@ -14,7 +14,8 @@ def run_script(name):
 
 def test_make_screenshots():
     run_script("make_screenshots.py")
-    for f in ("screenshot-drawing.svg", "screenshot-import.svg"):
+    for f in ("screenshot-drawing.svg", "screenshot-import.svg",
+              "screenshot-model3d.svg"):
         p = ASSETS / f
         assert p.exists() and p.stat().st_size > 1000
         assert b"<svg" in p.read_bytes()[:200]
@@ -22,7 +23,7 @@ def test_make_screenshots():
 
 def test_make_gifs():
     run_script("make_gifs.py")
-    for f in ("demo-drawing.gif", "demo-import.gif"):
+    for f in ("demo-drawing.gif", "demo-import.gif", "demo-model3d.gif"):
         p = ASSETS / f
         assert p.exists() and 1000 < p.stat().st_size < 4 * 1024 * 1024
         assert p.read_bytes()[:6] in (b"GIF87a", b"GIF89a")

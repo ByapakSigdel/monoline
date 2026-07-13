@@ -10,9 +10,9 @@ shape correction, curated palettes, symmetry, and a dot grid.
 *Freehand drawing with live smoothing — hold **Ctrl** and a rough circle
 snaps to a perfect one; symmetry mirrors strokes as you draw.*
 
-| | |
-|---|---|
-| ![drawing](docs/assets/screenshot-drawing.svg) | ![import](docs/assets/screenshot-import.svg) |
+| | | |
+|---|---|---|
+| ![drawing](docs/assets/screenshot-drawing.svg) | ![import](docs/assets/screenshot-import.svg) | ![3D model](docs/assets/screenshot-model3d.svg) |
 
 ## Install
 
@@ -75,6 +75,11 @@ axes. The model renders as a shaded wireframe you can draw over.
 Undo restores the previous pose or removes the import entirely.
 
 Supported formats: OBJ, STL, GLB, GLTF, PLY, and OFF.
+
+![3D model demo](docs/assets/demo-model3d.gif)
+
+*Drop an icosahedron (or any mesh), spin it with **Shift+drag**, then doodle
+over the wireframe — the ground grid shows the 3D viewport space.*
 
 ## Palettes
 

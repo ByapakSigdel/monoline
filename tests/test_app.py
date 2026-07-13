@@ -338,6 +338,8 @@ async def test_video_drop_imports(anim_gif):
         assert app.document.video_path == anim_gif
         assert app.document.playback_bitmap is not None
         assert app._video_player is not None
+        app._stop_video()
+        await pilot.pause()
 
 
 async def test_video_undo_stops_playback(anim_gif):
@@ -349,6 +351,7 @@ async def test_video_undo_stops_playback(anim_gif):
         await pilot.press("u")
         assert app.document.video_path is None
         assert app._video_player is None
+        await pilot.pause()
 
 
 async def test_static_gif_imports_as_image(static_gif):

@@ -8,14 +8,21 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
+import math
 from PIL import Image, ImageDraw
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from demo_scene import make_demo_image, petal_points, wobbly_circle_points
+from demo_scene import (
+    demo_model_mesh,
+    make_demo_image,
+    petal_points,
+    wobbly_circle_points,
+)
 
 from monoline.bitmap import Bitmap
 from monoline.document import Stroke
 from monoline.imageconv import convert
+from monoline.model3d import ModelPose, render_model
 from monoline.palettes import get_palette
 from monoline.raster import BRAILLE_BASE, DOT_BITS, render_cells
 from monoline.shapes import recognize
@@ -107,10 +114,46 @@ def gif_import() -> None:
     save_gif(frames, ASSETS / "demo-import.gif", ms=70)
 
 
+def gif_model3d() -> None:
+    pal = get_palette("tokyonight")
+    vertices, faces = demo_model_mesh()
+    frames: List[Image.Image] = []
+    spin_steps = 28
+    for i in range(spin_steps):
+        pose = ModelPose(yaw=i * 2 * math.pi / spin_steps, pitch=0.35)
+        bitmap = render_model(vertices, faces, pose, W, H,
+                              pal.grid, pal.colors[3])
+        frames.append(render_frame([], bitmap, pal.background))
+    move_steps = 14
+    base_yaw = 2 * math.pi * (spin_steps - 1) / spin_steps
+    for i in range(1, move_steps + 1):
+        t = i / move_steps
+        pose = ModelPose(
+            yaw=base_yaw + t * 0.6,
+            pitch=0.35 + t * 0.25,
+            pan_x=t * 18 - 9,
+            pan_y=math.sin(t * math.pi) * 10,
+        )
+        bitmap = render_model(vertices, faces, pose, W, H,
+                              pal.grid, pal.colors[3])
+        frames.append(render_frame([], bitmap, pal.background))
+    final_pose = ModelPose(yaw=base_yaw + 0.6, pitch=0.6, pan_x=9, pan_y=0)
+    final_bitmap = render_model(vertices, faces, final_pose, W, H,
+                                pal.grid, pal.colors[3])
+    doodle = Stroke(points=wobbly_circle_points(W * 0.5, H * 0.82, H * 0.09),
+                    color=pal.colors[2])
+    for i in range(1, 13):
+        frames.append(render_frame([reveal(doodle, i / 12)], final_bitmap,
+                                   pal.background))
+    frames += [frames[-1]] * 14
+    save_gif(frames, ASSETS / "demo-model3d.gif", ms=75)
+
+
 def main() -> None:
     ASSETS.mkdir(parents=True, exist_ok=True)
     gif_drawing()
     gif_import()
+    gif_model3d()
 
 
 if __name__ == "__main__":

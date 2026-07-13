@@ -8,6 +8,7 @@ from typing import List, Optional, Union
 from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.css.query import NoMatches
 from textual.widgets import Static
 
 from monoline.canvas import DrawCanvas
@@ -119,6 +120,9 @@ class MonolineApp(App):
         # Document sizing happens in DrawCanvas.on_resize, once the canvas
         # actually has its size (canvas.size is still 0x0 when Mount fires).
         self._apply_palette()
+
+    def on_unmount(self) -> None:
+        self._stop_video()
 
     # -- stroke pipeline (enriched by Tasks 5/6/8/9) --
 
@@ -363,10 +367,15 @@ class MonolineApp(App):
         self.rerender_model()
 
     def _tick_video_frame(self) -> None:
-        if self._video_player is None:
+        if self._video_player is None or not self.is_running:
+            if not self.is_running:
+                self._stop_video()
             return
         self.document.set_playback_bitmap(self._video_player.next_bitmap())
-        self.query_one(DrawCanvas).rebuild()
+        try:
+            self.query_one(DrawCanvas).rebuild()
+        except NoMatches:
+            self._stop_video()
 
     def _stop_video(self) -> None:
         if self._video_timer is not None:

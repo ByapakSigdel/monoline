@@ -9,7 +9,12 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from demo_scene import make_demo_image, petal_points, wobbly_circle_points
+from demo_scene import (
+    make_demo_image,
+    petal_points,
+    wobbly_circle_points,
+    write_demo_model_obj,
+)
 
 from monoline.app import MonolineApp
 from monoline.canvas import DrawCanvas
@@ -69,12 +74,33 @@ async def shot_import() -> None:
         app.save_screenshot("screenshot-import.svg", str(ASSETS))
 
 
+async def shot_model3d() -> None:
+    app = MonolineApp()
+    model_path = ASSETS / "demo-icosahedron.obj"
+    write_demo_model_obj(model_path)
+    async with app.run_test(size=SIZE) as pilot:
+        app._import_model3d(str(model_path))
+        app.document.model3d.pose.yaw = 0.9
+        app.document.model3d.pose.pitch = 0.45
+        app.rerender_model()
+        add(app, wobbly_circle_points(app.document.width * 0.5,
+                                      app.document.height * 0.78,
+                                      app.document.height * 0.08),
+            app.palette.colors[2])
+        app.query_one(DrawCanvas).rebuild()
+        app.update_status()
+        await pilot.pause()
+        app.save_screenshot("screenshot-model3d.svg", str(ASSETS))
+
+
 def main() -> None:
     ASSETS.mkdir(parents=True, exist_ok=True)
     asyncio.run(shot_drawing())
     asyncio.run(shot_import())
+    asyncio.run(shot_model3d())
     print("wrote", ASSETS / "screenshot-drawing.svg")
     print("wrote", ASSETS / "screenshot-import.svg")
+    print("wrote", ASSETS / "screenshot-model3d.svg")
 
 
 if __name__ == "__main__":
