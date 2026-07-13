@@ -57,6 +57,7 @@ class Document:
         self.bitmap: Optional[Bitmap] = None
         self.video_path: Optional[str] = None
         self.playback_bitmap: Optional[Bitmap] = None
+        self.reveal_bitmap: Optional[Bitmap] = None
         self.model3d: Optional["Model3DState"] = None
         self.model_bitmap: Optional[Bitmap] = None
         self._undo: list = []
@@ -144,6 +145,10 @@ class Document:
     def set_playback_bitmap(self, bitmap: Optional[Bitmap]) -> None:
         """Update the current video frame without creating an undo step."""
         self.playback_bitmap = bitmap
+
+    def set_reveal_bitmap(self, bitmap: Optional[Bitmap]) -> None:
+        """Temporary frame shown during a reveal animation."""
+        self.reveal_bitmap = bitmap
 
     def clear(self) -> None:
         if (not self.strokes and self.bitmap is None and self.video_path is None

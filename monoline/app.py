@@ -21,46 +21,15 @@ from monoline.palettes import PALETTES, get_palette
 from monoline.shapes import recognize
 from monoline.smoothing import smooth
 from monoline.symmetry import MODES, siblings
-from monoline.video import VIDEO_SUFFIXES, VideoPlayer, is_video_path
-from monoline.model3d import MODEL_SUFFIXES, Model3DState, is_model_path, load_mesh, render_model
-
-IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}
-MEDIA_SUFFIXES = IMAGE_SUFFIXES | VIDEO_SUFFIXES | MODEL_SUFFIXES
-
-
-def media_path_from_paste(text: str) -> Optional[str]:
-    """Extract an image or video file path from terminal paste / drag-drop."""
-    from urllib.parse import unquote, urlparse
-
-    text = text.strip().strip('"').strip("'")
-    if not text:
-        return None
-    # Windows Terminal may paste file:// URLs when dropping files.
-    if text.lower().startswith("file:"):
-        text = unquote(urlparse(text).path)
-        if len(text) >= 3 and text[0] == "/" and text[2] == ":":
-            text = text[1:]
-    for line in text.splitlines():
-        candidate = line.strip().strip('"').strip("'")
-        if candidate.lower().startswith("file:"):
-            candidate = unquote(urlparse(candidate).path)
-            if len(candidate) >= 3 and candidate[0] == "/" and candidate[2] == ":":
-                candidate = candidate[1:]
-        p = Path(candidate)
-        if not p.is_file():
-            continue
-        suffix = p.suffix.lower()
-        if suffix in MEDIA_SUFFIXES or is_video_path(str(p)) or is_model_path(str(p)):
-            return str(p)
-    return None
-
-
-def image_path_from_paste(text: str) -> Optional[str]:
-    """Extract an image file path (excludes video and 3D model paths)."""
-    path = media_path_from_paste(text)
-    if path is None or is_video_path(path) or is_model_path(path):
-        return None
-    return path
+from monoline.media import (
+    IMAGE_SUFFIXES,
+    MEDIA_SUFFIXES,
+    image_path_from_paste,
+    media_path_from_paste,
+)
+from monoline.model3d import Model3DState, is_model_path, load_mesh, render_model
+from monoline.reveal import STYLES, RevealPlayer, build_frames, snapshot_bitmap
+from monoline.video import VideoPlayer, is_video_path
 
 
 class StatusBar(Static):
@@ -86,6 +55,8 @@ class MonolineApp(App):
         Binding("c", "clear", "Clear", show=False),
         Binding("i", "import_image", "Import", show=False),
         Binding("v", "paste_image", "Paste image", show=False),
+        Binding("a", "reveal_play", "Animate", show=False),
+        Binding("A", "reveal_cycle", "Anim style", show=False),
     ] + [Binding(str(i + 1), f"pick_color({i})", "Color", show=False) for i in range(9)]
 
     def __init__(self, path: Optional[str] = None,
@@ -106,6 +77,9 @@ class MonolineApp(App):
         self.symmetry = "off"
         self._video_player: Optional[VideoPlayer] = None
         self._video_timer = None
+        self._reveal_player: Optional[RevealPlayer] = None
+        self._reveal_timer = None
+        self.reveal_style = 0
         self._mesh_cache: dict = {}
 
     @property
@@ -123,6 +97,7 @@ class MonolineApp(App):
 
     def on_unmount(self) -> None:
         self._stop_video()
+        self._stop_reveal()
 
     # -- stroke pipeline (enriched by Tasks 5/6/8/9) --
 
@@ -267,6 +242,10 @@ class MonolineApp(App):
         self._import_media(path)
 
     def _import_media(self, path: str) -> None:
+        path = os.path.normpath(path)
+        if self.document.width == 0 or self.document.height == 0:
+            self.pending_import = path
+            return
         if is_model_path(path):
             self._import_model3d(path)
         elif is_video_path(path):
@@ -318,7 +297,7 @@ class MonolineApp(App):
         try:
             mesh = load_mesh(path)
             self._mesh_cache[path] = mesh
-        except (OSError, ValueError) as exc:
+        except Exception as exc:
             self.notify(f"import failed: {exc}", severity="error")
             return
         state = Model3DState(path=path, color=self.pen_color)
@@ -341,10 +320,15 @@ class MonolineApp(App):
             except (OSError, ValueError):
                 return
         vertices, faces = mesh
-        canvas = self.query_one(DrawCanvas)
+        dot_w = max(self.document.width, 2)
+        dot_h = max(self.document.height, 4)
+        try:
+            canvas = self.query_one(DrawCanvas)
+        except NoMatches:
+            return
         bitmap = render_model(
             vertices, faces, state.pose,
-            self.document.width, self.document.height,
+            dot_w, dot_h,
             self.palette.grid, state.color,
         )
         self.document.set_model_bitmap(bitmap)
@@ -383,6 +367,67 @@ class MonolineApp(App):
             self._video_timer = None
         self._video_player = None
         self.document.set_playback_bitmap(None)
+
+    def _stop_reveal(self) -> None:
+        if self._reveal_timer is not None:
+            self._reveal_timer.stop()
+            self._reveal_timer = None
+        self._reveal_player = None
+        self.document.set_reveal_bitmap(None)
+
+    def _snapshot_for_reveal(self):
+        w, h = self.document.width, self.document.height
+        if w <= 0 or h <= 0:
+            return None
+        source = self.document.display_bitmap
+        return snapshot_bitmap(self.document.strokes, w, h, bitmap=source)
+
+    def action_reveal_play(self) -> None:
+        if self._reveal_player is not None:
+            self._stop_reveal()
+            self.query_one(DrawCanvas).rebuild()
+            self.update_status()
+            return
+        snap = self._snapshot_for_reveal()
+        if snap is None:
+            self.notify("nothing to animate", severity="warning")
+            return
+        self._stop_video()
+        style = STYLES[self.reveal_style]
+        frames = build_frames(snap, style)
+        if not frames:
+            self.notify("nothing to animate", severity="warning")
+            return
+        self._reveal_player = RevealPlayer(frames, fps=24.0)
+        self._tick_reveal_frame()
+        self._reveal_timer = self.set_interval(1.0 / 24.0, self._tick_reveal_frame)
+        self.update_status()
+        self.notify(f"animating ({style})")
+
+    def action_reveal_cycle(self) -> None:
+        self.reveal_style = (self.reveal_style + 1) % len(STYLES)
+        self.update_status()
+        self.notify(f"animation: {STYLES[self.reveal_style]}")
+
+    def _tick_reveal_frame(self) -> None:
+        if self._reveal_player is None or not self.is_running:
+            if not self.is_running:
+                self._stop_reveal()
+            return
+        bitmap = self._reveal_player.next_bitmap()
+        if bitmap is None:
+            self._stop_reveal()
+            try:
+                self.query_one(DrawCanvas).rebuild()
+            except NoMatches:
+                pass
+            self.update_status()
+            return
+        self.document.set_reveal_bitmap(bitmap)
+        try:
+            self.query_one(DrawCanvas).rebuild()
+        except NoMatches:
+            self._stop_reveal()
 
     def _start_video_playback(self) -> None:
         path = self.document.video_path
@@ -474,9 +519,12 @@ class MonolineApp(App):
         grid = "  grid" if self.grid_on else ""
         video = "  ▶" if self.document.video_path else ""
         model = "  3D" if self.document.model3d else ""
+        reveal = f"  anim:{STYLES[self.reveal_style]}"
+        if self._reveal_player is not None:
+            reveal += " ▶"
         self.query_one(StatusBar).update(
             f" {self.tool}  {self.palette.name} {swatches}  sym:{self.symmetry}"
-            f"{grid}{video}{model}  {name} {dirty}  ? help"
+            f"{grid}{video}{model}{reveal}  {name} {dirty}  ? help"
         )
 
 

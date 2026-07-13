@@ -63,19 +63,26 @@ def is_model_path(path: str) -> bool:
 
 def load_mesh(path: str) -> Tuple[List[Vec3], List[Face]]:
     """Load mesh vertices and triangular faces from a 3D file."""
-    import trimesh
-
-    loaded = trimesh.load(path, force="mesh")
-    if isinstance(loaded, trimesh.Scene):
-        meshes = [g for g in loaded.geometry.values()
-                  if isinstance(g, trimesh.Trimesh)]
-        if not meshes:
-            raise ValueError(f"no mesh geometry in {path}")
-        loaded = trimesh.util.concatenate(meshes)
-    if not isinstance(loaded, trimesh.Trimesh) or loaded.vertices is None:
-        raise ValueError(f"unsupported 3D file: {path}")
-    vertices = loaded.vertices.tolist()
-    faces_raw = loaded.faces.tolist()
+    try:
+        import trimesh
+    except ImportError as exc:
+        raise ValueError("3D import requires trimesh (reinstall monoline)") from exc
+    try:
+        loaded = trimesh.load(path, force="mesh")
+        if isinstance(loaded, trimesh.Scene):
+            meshes = [g for g in loaded.geometry.values()
+                      if isinstance(g, trimesh.Trimesh)]
+            if not meshes:
+                raise ValueError(f"no mesh geometry in {path}")
+            loaded = trimesh.util.concatenate(meshes)
+        if not isinstance(loaded, trimesh.Trimesh) or loaded.vertices is None:
+            raise ValueError(f"unsupported 3D file: {path}")
+        vertices = loaded.vertices.tolist()
+        faces_raw = loaded.faces.tolist()
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError(str(exc)) from exc
     faces: List[Face] = []
     for face in faces_raw:
         if len(face) == 3:

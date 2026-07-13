@@ -17,6 +17,7 @@ KEYMAP = """\
  r / Ctrl+Y      redo          Ctrl+S      save
  x               export (.txt ANSI / .svg) c  clear
  i          import image/video/3D  v   paste media
+ a / A      play / cycle reveal animation (drop, rain, scan…)
  Shift+drag rotate & move 3D model (when loaded)
  ?               this help     q           quit
 """

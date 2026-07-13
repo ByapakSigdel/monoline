@@ -70,8 +70,12 @@ class DrawCanvas(Widget):
 
     def rebuild(self) -> None:
         w, h = self.size.width * 2, self.size.height * 4
-        self._cells = render_cells(list(self.document.strokes) + self._live, w, h,
-                                   bitmap=self.document.display_bitmap)
+        if self.document.reveal_bitmap is not None:
+            self._cells = render_cells([], w, h,
+                                       bitmap=self.document.reveal_bitmap)
+        else:
+            self._cells = render_cells(list(self.document.strokes) + self._live,
+                                       w, h, bitmap=self.document.display_bitmap)
         self.refresh()
 
     def on_resize(self, event: events.Resize) -> None:

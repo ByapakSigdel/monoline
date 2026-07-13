@@ -242,11 +242,11 @@ async def test_canvas_paste_image_path_imports(png):
 
 
 async def test_file_url_paste_imports(png):
-    from monoline.app import image_path_from_paste
+    from monoline.media import media_path_from_paste
     from pathlib import Path
 
     url = Path(png).as_uri()
-    assert image_path_from_paste(url) == png
+    assert media_path_from_paste(url) == png
 
 
 async def test_paste_non_image_ignored():
@@ -377,7 +377,24 @@ async def test_model_drop_imports(triangle_obj):
     app = MonolineApp()
     async with app.run_test(size=(40, 12)) as pilot:
         canvas = app.query_one(DrawCanvas)
-        canvas.post_message(events.Paste(triangle_obj))
+        canvas.post_message(events.Paste("{" + triangle_obj + "}"))
+        await pilot.pause()
+        assert app.document.model3d is not None
+        assert app.document.model_bitmap is not None
+
+
+async def test_model_drop_deferred_until_layout(triangle_obj):
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        app.pending_import = None
+        app.document.width = 0
+        app.document.height = 0
+        app._import_media(triangle_obj)
+        assert app.pending_import == triangle_obj
+        assert app.document.model3d is None
+        app.document.width = 80
+        app.document.height = 48
+        app.apply_pending_import()
         await pilot.pause()
         assert app.document.model3d is not None
         assert app.document.model_bitmap is not None
@@ -404,6 +421,41 @@ async def test_model_undo_removes_import(triangle_obj):
         await pilot.press("u")
         assert app.document.model3d is None
         assert app.document.model_bitmap is None
+
+
+async def test_reveal_animation_plays_and_stops():
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        canvas = app.query_one(DrawCanvas)
+        canvas.begin(2, 2, ctrl=False)
+        canvas.extend(8, 4, ctrl=False)
+        canvas.end()
+        await pilot.press("a")
+        await pilot.pause()
+        assert app._reveal_player is not None
+        assert app.document.reveal_bitmap is not None
+        app._stop_reveal()
+        canvas.rebuild()
+        await pilot.pause()
+        assert app.document.reveal_bitmap is None
+        assert app._reveal_player is None
+
+
+async def test_reveal_empty_canvas_notifies():
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        await pilot.press("a")
+        await pilot.pause()
+        assert app._reveal_player is None
+
+
+async def test_reveal_cycle_changes_style():
+    from monoline.reveal import STYLES
+    app = MonolineApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        start = app.reveal_style
+        await pilot.press("A")
+        assert app.reveal_style == (start + 1) % len(STYLES)
 
 
 @pytest.fixture
